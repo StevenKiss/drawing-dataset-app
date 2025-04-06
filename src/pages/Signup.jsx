@@ -13,7 +13,7 @@ export default function Signup() {
     try {
       await createUserWithEmailAndPassword(auth, email, password);
       console.log("✅ Account created");
-      navigate('/dashboard'); // or wherever your authenticated page is
+      navigate('/login');
     } catch (error) {
       console.error("❌ Signup error:", error.message);
     }
