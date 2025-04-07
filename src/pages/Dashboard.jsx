@@ -1,89 +1,149 @@
-// src/pages/Dashboard.jsx
-
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { db } from '../firebase';
+import { getAuth } from 'firebase/auth';
+import QRCode from 'react-qr-code';
+import { useLocation } from 'react-router-dom';
 
 export default function Dashboard() {
-  const [prompts, setPrompts] = useState([]);
-  const [newPrompt, setNewPrompt] = useState('');
-  const [imageSize, setImageSize] = useState('28'); // default size
-  const [isLinkOpen, setIsLinkOpen] = useState(true);
+  const auth = getAuth();
+  const user = auth.currentUser;
 
-  const handleAddPrompt = () => {
-    if (newPrompt.trim() === '') return;
-    setPrompts([...prompts, newPrompt]);
-    setNewPrompt('');
+  const [prompts, setPrompts] = useState(['']);
+  const [outputSize, setOutputSize] = useState(28);
+  const [isOpen, setIsOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [shareUrl, setShareUrl] = useState('');
+
+  const location = useLocation();
+
+  // Fetch dashboard state from Firestore on mount
+  useEffect(() => {
+    const fetchData = async () => {
+      if (user) {
+        // Create link for other to draw with
+        const baseUrl = window.location.origin;
+        const link = `${baseUrl}/draw/${user.uid}`;
+        setShareUrl(link);
+
+        // Access database
+        const docRef = doc(db, 'creators', user.uid);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          setPrompts(data.prompts || ['']);
+          setOutputSize(data.outputSize || 28);
+          setIsOpen(data.isOpen || false);
+        } else {
+          // If no doc exists, create one with defaults
+          await setDoc(docRef, {
+            prompts: [''],
+            outputSize: 28,
+            isOpen: false,
+          });
+        }
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [user]);
+
+  // Save updates to Firestore
+  const saveToFirestore = async (newData = {}) => {
+    if (!user) return;
+    const docRef = doc(db, 'creators', user.uid);
+    await setDoc(docRef, {
+      prompts,
+      outputSize,
+      isOpen,
+      ...newData,
+    });
   };
 
-  const handleDeletePrompt = (index) => {
+  // Prompt handlers
+  const handlePromptChange = (index, value) => {
     const updated = [...prompts];
-    updated.splice(index, 1);
+    updated[index] = value;
     setPrompts(updated);
+    saveToFirestore({ prompts: updated });
   };
 
-  const handleCopyLink = () => {
-    const link = `http://localhost:5173/submit`; // replace with dynamic route later
-    navigator.clipboard.writeText(link);
-    alert("🔗 Link copied!");
+  const addPrompt = () => {
+    const updated = [...prompts, ''];
+    setPrompts(updated);
+    saveToFirestore({ prompts: updated });
   };
+
+  const removePrompt = (index) => {
+    const updated = prompts.filter((_, i) => i !== index);
+    setPrompts(updated);
+    saveToFirestore({ prompts: updated });
+  };
+
+  // Output size change
+  const handleOutputSizeChange = (e) => {
+    const size = parseInt(e.target.value);
+    setOutputSize(size);
+    saveToFirestore({ outputSize: size });
+  };
+
+  // Toggle link status
+  const handleIsOpenToggle = () => {
+    const newState = !isOpen;
+    setIsOpen(newState);
+    saveToFirestore({ isOpen: newState });
+  };
+
+  if (loading) return <div style={{ padding: '2rem' }}>Loading dashboard...</div>;
 
   return (
-    <div style={{ padding: '2rem', maxWidth: '600px', margin: '0 auto' }}>
-      <h1>📋 Dataset Creator Dashboard</h1>
+    <div style={{ padding: '2rem' }}>
+      <h1>Dataset Creator Dashboard</h1>
 
-      {/* Prompt Management */}
-      <div style={{ marginTop: '2rem' }}>
-        <h2>✏️ Drawing Prompts</h2>
-        <input
-          value={newPrompt}
-          onChange={(e) => setNewPrompt(e.target.value)}
-          placeholder="Enter a drawing prompt..."
-        />
-        <button onClick={handleAddPrompt}>Add Prompt</button>
-        <ul>
-          {prompts.map((prompt, i) => (
-            <li key={i}>
-              {prompt}
-              <button onClick={() => handleDeletePrompt(i)}>❌</button>
-            </li>
-          ))}
-        </ul>
-      </div>
-
-      {/* Output Image Size */}
-      <div style={{ marginTop: '2rem' }}>
-        <h2>📐 Output Image Size</h2>
-        <select value={imageSize} onChange={(e) => setImageSize(e.target.value)}>
-          <option value="28">28 x 28</option>
-          <option value="64">64 x 64</option>
-          <option value="128">128 x 128</option>
-        </select>
-      </div>
-
-      {/* Link Access Toggle */}
-      <div style={{ marginTop: '2rem' }}>
-        <h2>🔐 Access Control</h2>
-        <label>
+      <h2>✏️ Drawing Prompts</h2>
+      {prompts.map((prompt, index) => (
+        <div key={index} style={{ marginBottom: '0.5rem' }}>
           <input
-            type="checkbox"
-            checked={isLinkOpen}
-            onChange={() => setIsLinkOpen(!isLinkOpen)}
+            value={prompt}
+            onChange={(e) => handlePromptChange(index, e.target.value)}
+            placeholder={`Prompt ${index + 1}`}
+            style={{ marginRight: '0.5rem' }}
           />
-          {' '}Allow submissions from link
-        </label>
-      </div>
+          <button onClick={() => removePrompt(index)}>Remove</button>
+        </div>
+      ))}
+      <button onClick={addPrompt}>➕ Add Prompt</button>
 
-      {/* Copy Link Button */}
-      <div style={{ marginTop: '2rem' }}>
-        <button onClick={handleCopyLink}>📋 Copy Submission Link</button>
-      </div>
+      <h2 style={{ marginTop: '2rem' }}>📏 Output Image Size</h2>
+      <input
+        type="number"
+        min="1"
+        value={outputSize}
+        onChange={handleOutputSizeChange}
+      />
 
-      {/* Log out */}
-      <div style={{ marginTop: '2rem' }}>
-        <button onClick={() => {
-          // optional: add actual logout functionality here
-          alert("You’ve been logged out!");
-        }}>🚪 Logout</button>
-      </div>
+      <h2 style={{ marginTop: '2rem' }}>🔗 Link Status</h2>
+      <label>
+        <input type="checkbox" checked={isOpen} onChange={handleIsOpenToggle} />
+        {isOpen ? 'Open for Responses' : 'Closed to Responses'}
+      </label>
+      {isOpen && (
+        <>
+            <h2 style={{ marginTop: '2rem' }}>📤 Shareable Link</h2>
+            <p>
+            Send this to contributors:
+            <br />
+            <a href={shareUrl} target="_blank" rel="noreferrer">
+                {shareUrl}
+            </a>
+            </p>
+
+            <h3>📱 QR Code</h3>
+            <QRCode value={shareUrl} size={160} />
+        </>
+        )}
+
     </div>
   );
 }
