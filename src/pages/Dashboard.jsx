@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../firebase';
 import { getAuth } from 'firebase/auth';
 import QRCode from 'react-qr-code';
 import { useLocation } from 'react-router-dom';
+
 
 export default function Dashboard() {
   const auth = getAuth();
@@ -14,6 +15,7 @@ export default function Dashboard() {
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [shareUrl, setShareUrl] = useState('');
+  const [drawings, setDrawings] = useState([]);
 
   const location = useLocation();
 
@@ -47,6 +49,7 @@ export default function Dashboard() {
     };
 
     fetchData();
+    fetchDrawings();
   }, [user]);
 
   // Save updates to Firestore
@@ -94,6 +97,16 @@ export default function Dashboard() {
     setIsOpen(newState);
     saveToFirestore({ isOpen: newState });
   };
+
+  // Fetch creator's drawings
+  const fetchDrawings = async () => {
+    if (!user) return;
+    const q = query(collection(db, 'drawings'), where('creatorId', '==', user.uid));
+    const snapshot = await getDocs(q);
+    const fetched = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    setDrawings(fetched);
+  };
+  
 
   if (loading) return <div style={{ padding: '2rem' }}>Loading dashboard...</div>;
 
@@ -143,7 +156,38 @@ export default function Dashboard() {
             <QRCode value={shareUrl} size={160} />
         </>
         )}
+        <h2 style={{ marginTop: '3rem' }}>🧪 Dataset Preview</h2>
+            {drawings.length === 0 ? (
+            <p>No drawings submitted yet.</p>
+            ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(80px, 1fr))', gap: '1rem', marginTop: '1rem' }}>
+                {drawings.map((drawing, idx) => (
+                <canvas
+                    key={drawing.id}
+                    width={outputSize}
+                    height={outputSize}
+                    ref={canvas => {
+                    if (canvas && drawing.imagePixels) {
+                        const ctx = canvas.getContext('2d');
+                        const imgData = ctx.createImageData(outputSize, outputSize);
+                        const flat = drawing.imagePixels.flat();
 
+                        for (let i = 0; i < flat.length; i++) {
+                        const grayscale = Math.floor(flat[i] * 255);
+                        imgData.data[i * 4 + 0] = grayscale; // R
+                        imgData.data[i * 4 + 1] = grayscale; // G
+                        imgData.data[i * 4 + 2] = grayscale; // B
+                        imgData.data[i * 4 + 3] = 255;       // A
+                        }
+
+                        ctx.putImageData(imgData, 0, 0);
+                    }
+                    }}
+                    style={{ border: '1px solid #ccc' }}
+                />
+                ))}
+            </div>
+        )}
     </div>
   );
 }
