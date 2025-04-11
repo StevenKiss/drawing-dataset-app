@@ -10,10 +10,11 @@ import {
   deleteDoc,
 } from "firebase/firestore";
 import { db } from "../firebase";
-import { getAuth } from "firebase/auth";
+import { getAuth, signOut } from "firebase/auth";
 import QRCode from "react-qr-code";
 import { useLocation } from "react-router-dom";
 import Papa from "papaparse";
+import { v4 as uuidv4 } from 'uuid';
 
 import DrawExampleModal from "../components/DrawExampleModal";
 
@@ -31,44 +32,55 @@ export default function Dashboard() {
   ]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingPromptIndex, setEditingPromptIndex] = useState(null);
+  const [datasets, setDatasets] = useState([]);
+  const [selectedDatasetId, setSelectedDatasetId] = useState(null);
+  const [selectedDataset, setSelectedDataset] = useState(null);
+  const [stats, setStats] = useState({ total: 0, perPrompt: {}, lastTime: null});
 
   const location = useLocation();
+
+  // Fetch the default set to start
+  useEffect(() => {
+    const fetchInitialDataset = async () => {
+      if (user) {
+        // Fetch all datasets
+        const datasetQuery = collection(db, "creators", user.uid, "datasets");
+        const snapshot = await getDocs(datasetQuery);
+        const allDatasets = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+  
+        setDatasets(allDatasets);
+  
+        const defaultDataset = allDatasets.find(d => d.id === "default") || allDatasets[0];
+        if (defaultDataset) {
+          setSelectedDatasetId(defaultDataset.id);
+        }
+      }
+    };
+  
+    fetchInitialDataset();
+  }, [user]);
 
   // Fetch dashboard state from Firestore on mount
   useEffect(() => {
     const fetchData = async () => {
-      if (user) {
+      if (user && selectedDatasetId) {
         // Create link for other to draw with
         const baseUrl = window.location.origin;
-        const link = `${baseUrl}/draw/${user.uid}`;
+        const link = `${baseUrl}/draw/${user.uid}/${selectedDatasetId}`;
         setShareUrl(link);
 
         // Access database
-        const docRef = doc(db, "creators", user.uid);
+        const docRef = doc(db, "creators", user.uid, "datasets", selectedDatasetId);
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
           const data = docSnap.data();
-          // Convert old prompt format (strings) to new format (objects)
-          const rawPrompts = data.prompts || [];
-          const updatedPrompts = rawPrompts.map((p) =>
-            typeof p === "string"
-              ? { label: p, description: "", exampleImage: null }
-              : {
-                  label: p.label || "",
-                  description: p.description || "",
-                  exampleImage: p.exampleImage || null,
-                }
-          );
-          setPrompts(updatedPrompts);
+        
+          setPrompts(data.prompts || []);
           setOutputSize(data.outputSize || 28);
           setIsOpen(data.isOpen || false);
-        } else {
-          // If no doc exists, create one with defaults
-          await setDoc(docRef, {
-            prompts: [""],
-            outputSize: 28,
-            isOpen: false,
-          });
         }
         setLoading(false);
       }
@@ -76,7 +88,7 @@ export default function Dashboard() {
 
     fetchData();
     fetchDrawings();
-  }, [user]);
+  }, [user, selectedDatasetId]);
 
   // Save updates to Firestore
   const saveToFirestore = async (newData = {}) => {
@@ -87,6 +99,15 @@ export default function Dashboard() {
       outputSize,
       isOpen,
       ...newData,
+    });
+  };
+
+  // To sign out
+  const handleLogout = () => {
+    const auth = getAuth();
+    signOut(auth).then(() => {
+      console.log("User signed out");
+      window.location.href = "/login";
     });
   };
 
@@ -115,7 +136,7 @@ export default function Dashboard() {
 
   // Output size change
   const handleOutputSizeChange = (e) => {
-    const size = parseInt(e.target.value);
+    const size = parseInt(e.target.value, 10);
     setOutputSize(size);
     saveToFirestore({ outputSize: size });
   };
@@ -132,13 +153,79 @@ export default function Dashboard() {
     if (!user) return;
     const q = query(
       collection(db, "drawings"),
-      where("creatorId", "==", user.uid)
+      where("creatorId", "==", user.uid),
+      where("datasetId", "==", selectedDatasetId)
     );
     const snapshot = await getDocs(q);
     const fetched = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
     setDrawings(fetched);
+
+    // Compute Stats
+    let promptCounts = {};
+    let latestTime = null;
+
+    for (const d of fetched) {
+      promptCounts[d.prompt] = (promptCounts[d.promt] || 0) + 1;
+      if (d.createdAt?.toDate) {
+        const t = d.createdAt.toDate();
+        if (!latestTime || t > latestTime) {
+          latestTime = t;
+        }
+      }
+    }
+
+    setStats({
+      total: fetched.lenghth,
+      perPrompt: promptCounts,
+      lastTime: latestTime,
+    })
   };
 
+  // Creating a new dataset
+  const handleCreateDataset = async () => {
+    if (!user) return;
+    const newId = uuidv4();
+    const newRef = doc(db, "creators", user.uid, "datasets", newId);
+    const newDataset = {
+      name: "Untitled Dataset",
+      prompts: [],
+      outputSize: 28,
+      isOpen: false,
+    };
+    await setDoc(newRef, newDataset);
+    setSelectedDatasetId(newId);
+    setDatasets((prev) => [...prev, { id: newId, ...newDataset }]);
+  };
+
+  // Delete a dataset
+  const handleDeleteDataset = async () => {
+    if (!user || !selectedDatasetId) return;
+  
+    const confirmDelete = confirm("Are you sure you want to delete this dataset? This cannot be undone.");
+    if (!confirmDelete) return;
+  
+    // Delete dataset document
+    await deleteDoc(doc(db, "creators", user.uid, "datasets", selectedDatasetId));
+  
+    // Remove from local state
+    const remaining = datasets.filter((ds) => ds.id !== selectedDatasetId);
+    setDatasets(remaining);
+  
+    // Select another dataset or reset
+    if (remaining.length > 0) {
+      setSelectedDatasetId(remaining[0].id);
+    } else {
+      setSelectedDatasetId(null);
+      setPrompts([]);
+      setOutputSize(28);
+      setIsOpen(false);
+      setShareUrl("");
+      setDrawings([]);
+    }
+  
+    console.log("✅ Dataset deleted");
+  };
+  
   // Export button handling
   const handleExportCSV = (format = "pixels") => {
     if (!drawings.length) {
@@ -180,7 +267,52 @@ export default function Dashboard() {
 
   return (
     <div style={{ padding: "2rem" }}>
-      <h1>Dataset Creator Dashboard</h1>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginBottom: "1rem",
+        }}
+      >
+        <h1>Dataset Creator Dashboard</h1>
+        <button onClick={handleLogout} style={{ padding: "0.5rem 1rem" }}>
+          🚪 Log Out
+        </button>
+        <button onClick={handleCreateDataset}>➕ Create New Dataset</button>
+      </div>
+
+      <select
+        value={selectedDatasetId}
+        onChange={(e) => setSelectedDatasetId(e.target.value)}
+      >
+        {datasets.map((ds) => (
+          <option key={ds.id} value={ds.id}>
+            {ds.name || ds.id}
+          </option>
+        ))}
+      </select>
+
+      <input
+        type="text"
+        value={
+          datasets.find((ds) => ds.id === selectedDatasetId)?.name || "Untitled"
+        }
+        onChange={async (e) => {
+          const newName = e.target.value;
+          setDatasets((prev) =>
+            prev.map((ds) =>
+              ds.id === selectedDatasetId ? { ...ds, name: newName } : ds
+            )
+          );
+          await setDoc(
+            doc(db, "creators", user.uid, "datasets", selectedDatasetId),
+            { name: newName },
+            { merge: true }
+          );
+        }}
+        style={{ fontSize: "1.2rem", marginBottom: "1rem" }}
+      />
 
       <h2>✏️ Drawing Prompts</h2>
       {prompts.map((prompt, index) => (
@@ -264,12 +396,18 @@ export default function Dashboard() {
       <button onClick={addPrompt}>➕ Add Prompt</button>
 
       <h2 style={{ marginTop: "2rem" }}>📏 Output Image Size</h2>
-      <input
-        type="number"
-        min="1"
+      <select
         value={outputSize}
-        onChange={handleOutputSizeChange}
-      />
+        onChange={(e) =>
+          handleOutputSizeChange({ target: { value: e.target.value } })
+        }
+      >
+        {[28, 32, 64, 128, 256].map((size) => (
+          <option key={size} value={size}>
+            {size} x {size}
+          </option>
+        ))}
+      </select>
 
       <h2 style={{ marginTop: "2rem" }}>🔗 Link Status</h2>
       <label>
@@ -291,6 +429,23 @@ export default function Dashboard() {
           <QRCode value={shareUrl} size={160} />
         </>
       )}
+      <h2 style={{ marginTop: "2rem" }}>📊 Dataset Stats</h2>
+      <p><strong>Total Submissions:</strong> {stats.total}</p>
+      {stats.lastTime && (
+        <p>
+          <strong>Last Submission:</strong>{" "}
+          {stats.lastTime.toLocaleString()}
+        </p>
+      )}
+
+      <h3>Submissions per Prompt</h3>
+      <ul>
+        {Object.entries(stats.perPrompt).map(([label, count]) => (
+          <li key={label}>
+            <strong>{label || "(No Label)"}:</strong> {count}
+          </li>
+        ))}
+      </ul>
       <h2 style={{ marginTop: "3rem" }}>🧪 Dataset Preview</h2>
       {drawings.length === 0 ? (
         <p>No drawings submitted yet.</p>
@@ -318,8 +473,8 @@ export default function Dashboard() {
                   {drawingsForPrompt.map((drawing) => (
                     <canvas
                       key={drawing.id}
-                      width={outputSize}
-                      height={outputSize}
+                      width={Number(outputSize)}
+                      height={Number(outputSize)}
                       title="Click to delete"
                       onClick={async () => {
                         if (
@@ -333,14 +488,13 @@ export default function Dashboard() {
                       }}
                       ref={(canvas) => {
                         if (canvas && drawing.imagePixels) {
-                          const ctx = canvas.getContext("2d");
-                          const imgData = ctx.createImageData(
-                            outputSize,
-                            outputSize
-                          );
                           const flat = drawing.imagePixels.flat();
+                          const totalPixels = flat.length;
+                          const size = Math.sqrt(totalPixels); // Recover the original size
+                          const ctx = canvas.getContext("2d");
+                          const imgData = ctx.createImageData(size, size);
 
-                          for (let i = 0; i < flat.length; i++) {
+                          for (let i = 0; i < totalPixels; i++) {
                             const grayscale = Math.floor(flat[i] * 255);
                             imgData.data[i * 4 + 0] = grayscale;
                             imgData.data[i * 4 + 1] = grayscale;
@@ -348,6 +502,8 @@ export default function Dashboard() {
                             imgData.data[i * 4 + 3] = 255;
                           }
 
+                          canvas.width = size;
+                          canvas.height = size;
                           ctx.putImageData(imgData, 0, 0);
                         }
                       }}
@@ -367,6 +523,21 @@ export default function Dashboard() {
         </button>
         <button onClick={() => handleExportCSV("base64")}>
           Download Base64 CSV
+        </button>
+      </div>
+      <div style={{ marginTop: "4rem", borderTop: "1px solid #ccc", paddingTop: "1rem" }}>
+        <button
+          onClick={handleDeleteDataset}
+          style={{
+            backgroundColor: "#ff4d4f",
+            color: "white",
+            padding: "0.5rem 1rem",
+            border: "none",
+            borderRadius: "4px",
+            cursor: "pointer",
+          }}
+        >
+          🗑️ Delete This Dataset
         </button>
       </div>
       {isModalOpen && (

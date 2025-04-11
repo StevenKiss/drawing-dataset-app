@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { auth } from '../firebase';
+import { auth, db } from '../firebase';
 import { useNavigate } from 'react-router-dom';
+import { doc, setDoc } from 'firebase/firestore';
 
 export default function Signup() {
   const [email, setEmail] = useState('');
@@ -11,9 +12,20 @@ export default function Signup() {
   const handleSignup = async (e) => {
     e.preventDefault();
     try {
-      await createUserWithEmailAndPassword(auth, email, password);
-      console.log("✅ Account created");
-      navigate('/login');
+      const userCred = await createUserWithEmailAndPassword(auth, email, password);
+      const userId = userCred.user.uid;
+  
+      // Create a default dataset document
+      const defaultDatasetRef = doc(db, "creators", userId, "datasets", "default");
+      await setDoc(defaultDatasetRef, {
+        name: "Default Dataset",
+        prompts: [],
+        outputSize: 28,
+        isOpen: false,
+      });
+  
+      console.log("✅ Account created + default dataset");
+      navigate("/login");
     } catch (error) {
       console.error("❌ Signup error:", error.message);
     }

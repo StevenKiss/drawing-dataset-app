@@ -12,7 +12,7 @@ import { db } from "../firebase";
 import Canvas from "../components/Canvas";
 
 export default function DrawPage() {
-  const { creatorId } = useParams();
+  const { creatorId, datasetId } = useParams();
   const canvasRef = useRef();
   const [creatorData, setCreatorData] = useState(null);
   const [currentPromptIndex, setCurrentPromptIndex] = useState(0);
@@ -20,7 +20,7 @@ export default function DrawPage() {
 
   useEffect(() => {
     const fetchCreator = async () => {
-      const docRef = doc(db, "creators", creatorId);
+      const docRef = doc(db, "creators", creatorId, "datasets", datasetId);
       const snap = await getDoc(docRef);
       if (snap.exists()) {
         setCreatorData(snap.data());
@@ -108,9 +108,26 @@ export default function DrawPage() {
       <p>
         Prompt {currentPromptIndex + 1} of {creatorData.prompts.length}
       </p>
-      {description && <p style={{ fontStyle: "italic" }}>{description}</p>}
+      {description && (
+        <p style={{ fontStyle: "italic", marginBottom: "1rem" }}>
+          {description}
+        </p>
+      )}
 
-      <Canvas ref={canvasRef} />
+      {typeof currentPrompt === "object" && currentPrompt.exampleImage && (
+        <div style={{ marginBottom: "1rem" }}>
+          <p style={{ marginBottom: "0.25rem" }}>🖼️ Example Drawing:</p>
+          <img
+            src={currentPrompt.exampleImage}
+            alt="Example"
+            style={{ maxWidth: "150px", border: "1px solid #ccc" }}
+          />
+        </div>
+      )}
+
+      <div style={{ width: 400, height: 400 }}>
+        <Canvas ref={canvasRef} width={400} height={400} />
+      </div>
 
       <div style={{ marginTop: "1rem" }}>
         <button onClick={handleSubmitDrawing} style={{ marginRight: "1rem" }}>
