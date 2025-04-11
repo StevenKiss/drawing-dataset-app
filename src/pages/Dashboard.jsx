@@ -15,6 +15,8 @@ import QRCode from "react-qr-code";
 import { useLocation } from "react-router-dom";
 import Papa from "papaparse";
 import { v4 as uuidv4 } from 'uuid';
+import JSZip from "jszip";
+import { saveAs } from "file-saver";
 
 import DrawExampleModal from "../components/DrawExampleModal";
 
@@ -93,7 +95,7 @@ export default function Dashboard() {
   // Save updates to Firestore
   const saveToFirestore = async (newData = {}) => {
     if (!user) return;
-    const docRef = doc(db, "creators", user.uid);
+    const docRef = doc(db, "creators", user.uid, "datasets", selectedDatasetId);
     await setDoc(docRef, {
       prompts,
       outputSize,
@@ -175,7 +177,7 @@ export default function Dashboard() {
     }
 
     setStats({
-      total: fetched.lenghth,
+      total: fetched.length,
       perPrompt: promptCounts,
       lastTime: latestTime,
     })
@@ -262,6 +264,59 @@ export default function Dashboard() {
     document.body.removeChild(link);
   };
 
+  // Zip download handling
+  const handleDownloadZip = async () => {
+    if (!drawings.length) {
+      alert("No drawings to export.");
+      return;
+    }
+  
+    const zip = new JSZip();
+    const labels = [];
+  
+    for (let i = 0; i < drawings.length; i++) {
+      const d = drawings[i];
+      const fileName = `img_${i + 1}.png`;
+      labels.push({ filename: fileName, label: d.prompt });
+  
+      // Add image to zip
+      const base64Data = d.imageBase64.split(",")[1]; // Remove data:image/... part
+      zip.file(fileName, base64Data, { base64: true });
+    }
+  
+    // Add labels.csv
+    const csv = Papa.unparse(labels);
+    zip.file("labels.csv", csv);
+  
+    const blob = await zip.generateAsync({ type: "blob" });
+    saveAs(blob, "dataset.zip");
+  };  
+
+  // Handle JSON export
+  const handleExportJSON = () => {
+    if (!drawings.length) {
+      alert("No drawings to export.");
+      return;
+    }
+  
+    const jsonData = drawings.map((d) => ({
+      label: d.prompt,
+      pixels: d.imagePixels,
+    }));
+  
+    const blob = new Blob([JSON.stringify(jsonData, null, 2)], {
+      type: "application/json",
+    });
+  
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", "dataset.json");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+  
   if (loading)
     return <div style={{ padding: "2rem" }}>Loading dashboard...</div>;
 
@@ -523,6 +578,12 @@ export default function Dashboard() {
         </button>
         <button onClick={() => handleExportCSV("base64")}>
           Download Base64 CSV
+        </button>
+        <button onClick={handleDownloadZip}>
+          Download PNGs + Labels ZIP
+        </button>
+        <button onClick={handleExportJSON}>
+          Download Tensor JSON
         </button>
       </div>
       <div style={{ marginTop: "4rem", borderTop: "1px solid #ccc", paddingTop: "1rem" }}>

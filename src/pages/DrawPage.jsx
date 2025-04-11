@@ -20,15 +20,27 @@ export default function DrawPage() {
 
   useEffect(() => {
     const fetchCreator = async () => {
-      const docRef = doc(db, "creators", creatorId, "datasets", datasetId);
-      const snap = await getDoc(docRef);
-      if (snap.exists()) {
-        setCreatorData(snap.data());
+      if (!creatorId || !datasetId) return;
+  
+      try {
+        const docRef = doc(db, "creators", creatorId, "datasets", datasetId);
+        const snap = await getDoc(docRef);
+        if (snap.exists()) {
+          setCreatorData(snap.data());
+          console.log("Fetched dataset:", snap.data());
+        } else {
+          setCreatorData(null);
+        }
+      } catch (err) {
+        console.error("Error fetching dataset:", err);
+        setCreatorData(null);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
+  
     fetchCreator();
-  }, [creatorId]);
+  }, [creatorId, datasetId]);
 
   const handleSubmitDrawing = async () => {
     if (!canvasRef.current || !creatorData) return;
@@ -68,6 +80,7 @@ export default function DrawPage() {
 
       await addDoc(collection(db, "drawings"), {
         creatorId,
+        datasetId,
         prompt: label,
         imageBase64: base64,
         imagePixels: pixels,
@@ -81,7 +94,14 @@ export default function DrawPage() {
 
   if (loading)
     return <div style={{ padding: "2rem" }}>Loading creator data...</div>;
-  if (!creatorData || !creatorData.isOpen)
+  if (!creatorData)
+    return (
+      <div style={{ padding: "2rem" }}>
+        ❌ Invalid link. Dataset not found.
+      </div>
+    );
+  
+  if (!creatorData.isOpen)
     return (
       <div style={{ padding: "2rem" }}>
         ❌ This link is currently closed to submissions.

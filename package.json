@@ -10,7 +10,9 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "file-saver": "^2.0.5",
     "firebase": "^11.6.0",
+    "jszip": "^3.10.1",
     "papaparse": "^5.5.2",
     "qrcode.react": "^4.2.0",
     "react": "^19.0.0",
