@@ -14,9 +14,10 @@ import { getAuth, signOut } from "firebase/auth";
 import QRCode from "react-qr-code";
 import { useLocation } from "react-router-dom";
 import Papa from "papaparse";
-import { v4 as uuidv4 } from 'uuid';
+import { v4 as uuidv4 } from "uuid";
 import JSZip from "jszip";
 import { saveAs } from "file-saver";
+import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 
 import DrawExampleModal from "../components/DrawExampleModal";
 
@@ -37,7 +38,11 @@ export default function Dashboard() {
   const [datasets, setDatasets] = useState([]);
   const [selectedDatasetId, setSelectedDatasetId] = useState(null);
   const [selectedDataset, setSelectedDataset] = useState(null);
-  const [stats, setStats] = useState({ total: 0, perPrompt: {}, lastTime: null});
+  const [stats, setStats] = useState({
+    total: 0,
+    perPrompt: {},
+    lastTime: null,
+  });
 
   const location = useLocation();
 
@@ -48,20 +53,21 @@ export default function Dashboard() {
         // Fetch all datasets
         const datasetQuery = collection(db, "creators", user.uid, "datasets");
         const snapshot = await getDocs(datasetQuery);
-        const allDatasets = snapshot.docs.map(doc => ({
+        const allDatasets = snapshot.docs.map((doc) => ({
           id: doc.id,
-          ...doc.data()
+          ...doc.data(),
         }));
-  
+
         setDatasets(allDatasets);
-  
-        const defaultDataset = allDatasets.find(d => d.id === "default") || allDatasets[0];
+
+        const defaultDataset =
+          allDatasets.find((d) => d.id === "default") || allDatasets[0];
         if (defaultDataset) {
           setSelectedDatasetId(defaultDataset.id);
         }
       }
     };
-  
+
     fetchInitialDataset();
   }, [user]);
 
@@ -75,11 +81,17 @@ export default function Dashboard() {
         setShareUrl(link);
 
         // Access database
-        const docRef = doc(db, "creators", user.uid, "datasets", selectedDatasetId);
+        const docRef = doc(
+          db,
+          "creators",
+          user.uid,
+          "datasets",
+          selectedDatasetId
+        );
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
           const data = docSnap.data();
-        
+
           setPrompts(data.prompts || []);
           setOutputSize(data.outputSize || 28);
           setIsOpen(data.isOpen || false);
@@ -92,9 +104,27 @@ export default function Dashboard() {
     fetchDrawings();
   }, [user, selectedDatasetId]);
 
+  // Make sure prompt at a minimum
+  const validatePrompts = () => {
+    if (prompts.length === 0) {
+      alert("You must have at least one prompt.");
+      return false;
+    }
+    for (let i = 0; i < prompts.length; i++) {
+      const label = prompts[i]?.label?.trim();
+      if (!label) {
+        alert(`Prompt ${i + 1} is missing a label.`);
+        return false;
+      }
+    }
+    return true;
+  };
+
   // Save updates to Firestore
-  const saveToFirestore = async (newData = {}) => {
+  const saveToFirestore = async (newData = {}, skipValidation = false) => {
     if (!user) return;
+    if (!skipValidation && !validatePrompts()) return; // prevent save if invalid
+
     const docRef = doc(db, "creators", user.uid, "datasets", selectedDatasetId);
     await setDoc(docRef, {
       prompts,
@@ -119,13 +149,13 @@ export default function Dashboard() {
       { label: "", description: "", exampleImage: null },
     ];
     setPrompts(updated);
-    saveToFirestore({ prompts: updated });
+    saveToFirestore({ prompts: updated }, true);
   };
 
   const removePrompt = (index) => {
     const updated = prompts.filter((_, i) => i !== index);
     setPrompts(updated);
-    saveToFirestore({ prompts: updated });
+    saveToFirestore({ prompts: updated }, true);
   };
 
   // Handle filed change
@@ -133,7 +163,7 @@ export default function Dashboard() {
     const updated = [...prompts];
     updated[index][field] = value;
     setPrompts(updated);
-    saveToFirestore({ prompts: updated });
+    saveToFirestore({ prompts: updated }, true);
   };
 
   // Output size change
@@ -143,9 +173,26 @@ export default function Dashboard() {
     saveToFirestore({ outputSize: size });
   };
 
-  // Toggle link status
+  // Link viewage
   const handleIsOpenToggle = () => {
     const newState = !isOpen;
+
+    // If opening the link, run validation
+    if (newState) {
+      if (prompts.length === 0) {
+        alert("You must have at least one prompt.");
+        return;
+      }
+
+      for (let i = 0; i < prompts.length; i++) {
+        const label = prompts[i].label?.trim();
+        if (!label) {
+          alert(`Prompt ${i + 1} is missing a label.`);
+          return;
+        }
+      }
+    }
+
     setIsOpen(newState);
     saveToFirestore({ isOpen: newState });
   };
@@ -180,7 +227,7 @@ export default function Dashboard() {
       total: fetched.length,
       perPrompt: promptCounts,
       lastTime: latestTime,
-    })
+    });
   };
 
   // Creating a new dataset
@@ -202,17 +249,21 @@ export default function Dashboard() {
   // Delete a dataset
   const handleDeleteDataset = async () => {
     if (!user || !selectedDatasetId) return;
-  
-    const confirmDelete = confirm("Are you sure you want to delete this dataset? This cannot be undone.");
+
+    const confirmDelete = confirm(
+      "Are you sure you want to delete this dataset? This cannot be undone."
+    );
     if (!confirmDelete) return;
-  
+
     // Delete dataset document
-    await deleteDoc(doc(db, "creators", user.uid, "datasets", selectedDatasetId));
-  
+    await deleteDoc(
+      doc(db, "creators", user.uid, "datasets", selectedDatasetId)
+    );
+
     // Remove from local state
     const remaining = datasets.filter((ds) => ds.id !== selectedDatasetId);
     setDatasets(remaining);
-  
+
     // Select another dataset or reset
     if (remaining.length > 0) {
       setSelectedDatasetId(remaining[0].id);
@@ -224,10 +275,10 @@ export default function Dashboard() {
       setShareUrl("");
       setDrawings([]);
     }
-  
+
     console.log("✅ Dataset deleted");
   };
-  
+
   // Export button handling
   const handleExportCSV = (format = "pixels") => {
     if (!drawings.length) {
@@ -270,27 +321,27 @@ export default function Dashboard() {
       alert("No drawings to export.");
       return;
     }
-  
+
     const zip = new JSZip();
     const labels = [];
-  
+
     for (let i = 0; i < drawings.length; i++) {
       const d = drawings[i];
       const fileName = `img_${i + 1}.png`;
       labels.push({ filename: fileName, label: d.prompt });
-  
+
       // Add image to zip
       const base64Data = d.imageBase64.split(",")[1]; // Remove data:image/... part
       zip.file(fileName, base64Data, { base64: true });
     }
-  
+
     // Add labels.csv
     const csv = Papa.unparse(labels);
     zip.file("labels.csv", csv);
-  
+
     const blob = await zip.generateAsync({ type: "blob" });
     saveAs(blob, "dataset.zip");
-  };  
+  };
 
   // Handle JSON export
   const handleExportJSON = () => {
@@ -298,16 +349,16 @@ export default function Dashboard() {
       alert("No drawings to export.");
       return;
     }
-  
+
     const jsonData = drawings.map((d) => ({
       label: d.prompt,
       pixels: d.imagePixels,
     }));
-  
+
     const blob = new Blob([JSON.stringify(jsonData, null, 2)], {
       type: "application/json",
     });
-  
+
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
@@ -316,7 +367,7 @@ export default function Dashboard() {
     link.click();
     document.body.removeChild(link);
   };
-  
+
   if (loading)
     return <div style={{ padding: "2rem" }}>Loading dashboard...</div>;
 
@@ -370,84 +421,130 @@ export default function Dashboard() {
       />
 
       <h2>✏️ Drawing Prompts</h2>
-      {prompts.map((prompt, index) => (
-        <div
-          key={index}
-          style={{
-            marginBottom: "1rem",
-            padding: "1rem",
-            border: "1px solid #ccc",
-          }}
-        >
-          <input
-            value={prompt.label}
-            onChange={(e) => handleFieldChange(index, "label", e.target.value)}
-            placeholder={`Prompt Label`}
-            style={{ marginRight: "0.5rem", width: "200px" }}
-          />
-          <br />
-          <textarea
-            value={prompt.description}
-            onChange={(e) =>
-              handleFieldChange(
-                index,
-                "description",
-                e.target.value.slice(0, 200)
-              )
-            }
-            placeholder="Description (max 200 chars)"
-            rows={3}
-            style={{ width: "100%", marginTop: "0.5rem" }}
-          />
-          <br />
-          <label>Upload or draw example:</label>
-          <input
-            type="file"
-            accept="image/*"
-            onChange={(e) => {
-              const file = e.target.files[0];
-              if (file) {
-                const reader = new FileReader();
-                reader.onloadend = () => {
-                  handleFieldChange(index, "exampleImage", reader.result);
-                };
-                reader.readAsDataURL(file);
-              }
-            }}
-          />
-          <button
-            style={{ marginLeft: "1rem" }}
-            onClick={() => {
-              setEditingPromptIndex(index);
-              setIsModalOpen(true);
-            }}
-          >
-            ✏️ Draw Instead
-          </button>
-          {prompt.exampleImage && (
-            <div style={{ marginTop: "0.5rem" }}>
-              <img
-                src={prompt.exampleImage}
-                alt="example"
-                style={{ maxWidth: "100px", border: "1px solid #aaa" }}
-              />
-              <br />
-              <button
-                onClick={() => handleFieldChange(index, "exampleImage", null)}
-              >
-                Remove Image
-              </button>
+      <DragDropContext
+        onDragEnd={(result) => {
+          const { source, destination } = result;
+          if (!destination) return;
+
+          const reordered = Array.from(prompts);
+          const [moved] = reordered.splice(source.index, 1);
+          reordered.splice(destination.index, 0, moved);
+
+          setPrompts(reordered);
+          saveToFirestore({ prompts: reordered }, true); // Skip validation on reorder
+        }}
+      >
+        <Droppable droppableId="promptList">
+          {(provided) => (
+            <div ref={provided.innerRef} {...provided.droppableProps}>
+              {prompts.map((prompt, index) => (
+                <Draggable
+                  key={index}
+                  draggableId={`prompt-${index}`}
+                  index={index}
+                >
+                  {(provided) => (
+                    <div
+                      ref={provided.innerRef}
+                      {...provided.draggableProps}
+                      {...provided.dragHandleProps}
+                      style={{
+                        ...provided.draggableProps.style,
+                        marginBottom: "1rem",
+                        padding: "1rem",
+                        border: "1px solid #ccc",
+                        background: "#f9f9f9",
+                      }}
+                    >
+                      {/* Prompt UI here */}
+                      <input
+                        value={prompt.label}
+                        onChange={(e) =>
+                          handleFieldChange(index, "label", e.target.value)
+                        }
+                        placeholder={`Prompt Label`}
+                        style={{ marginRight: "0.5rem", width: "200px" }}
+                      />
+                      <br />
+                      <textarea
+                        value={prompt.description}
+                        onChange={(e) =>
+                          handleFieldChange(
+                            index,
+                            "description",
+                            e.target.value.slice(0, 200)
+                          )
+                        }
+                        placeholder="Description (max 200 chars)"
+                        rows={3}
+                        style={{ width: "100%", marginTop: "0.5rem" }}
+                      />
+                      {/* Image upload, draw, remove, etc. */}
+                      <label>Upload or draw example:</label>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => {
+                          const file = e.target.files[0];
+                          if (file) {
+                            const reader = new FileReader();
+                            reader.onloadend = () => {
+                              handleFieldChange(
+                                index,
+                                "exampleImage",
+                                reader.result
+                              );
+                            };
+                            reader.readAsDataURL(file);
+                          }
+                        }}
+                      />
+                      <button
+                        style={{ marginLeft: "1rem" }}
+                        onClick={() => {
+                          setEditingPromptIndex(index);
+                          setIsModalOpen(true);
+                        }}
+                      >
+                        ✏️ Draw Instead
+                      </button>
+                      {prompt.exampleImage && (
+                        <div style={{ marginTop: "0.5rem" }}>
+                          <img
+                            src={prompt.exampleImage}
+                            alt="example"
+                            style={{
+                              maxWidth: "100px",
+                              border: "1px solid #aaa",
+                            }}
+                          />
+                          <br />
+                          <button
+                            onClick={() =>
+                              handleFieldChange(index, "exampleImage", null)
+                            }
+                          >
+                            Remove Image
+                          </button>
+                        </div>
+                      )}
+                      <br />
+                      <button
+                        onClick={() => removePrompt(index)}
+                        style={{ marginTop: "0.5rem" }}
+                      >
+                        Remove Prompt
+                      </button>
+                    </div>
+                  )}
+                </Draggable>
+              ))}
+              {provided.placeholder}
             </div>
           )}
-          <br />
-          <button
-            onClick={() => removePrompt(index)}
-            style={{ marginTop: "0.5rem" }}
-          >
-            Remove Prompt
-          </button>
-        </div>
-      ))}
+        </Droppable>
+      </DragDropContext>
+
       <button onClick={addPrompt}>➕ Add Prompt</button>
 
       <h2 style={{ marginTop: "2rem" }}>📏 Output Image Size</h2>
@@ -485,11 +582,12 @@ export default function Dashboard() {
         </>
       )}
       <h2 style={{ marginTop: "2rem" }}>📊 Dataset Stats</h2>
-      <p><strong>Total Submissions:</strong> {stats.total}</p>
+      <p>
+        <strong>Total Submissions:</strong> {stats.total}
+      </p>
       {stats.lastTime && (
         <p>
-          <strong>Last Submission:</strong>{" "}
-          {stats.lastTime.toLocaleString()}
+          <strong>Last Submission:</strong> {stats.lastTime.toLocaleString()}
         </p>
       )}
 
@@ -579,14 +677,16 @@ export default function Dashboard() {
         <button onClick={() => handleExportCSV("base64")}>
           Download Base64 CSV
         </button>
-        <button onClick={handleDownloadZip}>
-          Download PNGs + Labels ZIP
-        </button>
-        <button onClick={handleExportJSON}>
-          Download Tensor JSON
-        </button>
+        <button onClick={handleDownloadZip}>Download PNGs + Labels ZIP</button>
+        <button onClick={handleExportJSON}>Download Tensor JSON</button>
       </div>
-      <div style={{ marginTop: "4rem", borderTop: "1px solid #ccc", paddingTop: "1rem" }}>
+      <div
+        style={{
+          marginTop: "4rem",
+          borderTop: "1px solid #ccc",
+          paddingTop: "1rem",
+        }}
+      >
         <button
           onClick={handleDeleteDataset}
           style={{
