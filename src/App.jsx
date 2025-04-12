@@ -3,11 +3,11 @@ import { Routes, Route } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
 
-import Home from './pages/Home';
-import Dashboard from './pages/Dashboard';
-import Login from './pages/Login';         
-import Signup from './pages/Signup';       
-import DrawPage from './pages/DrawPage';
+import LandingPage from './pages/LandingPage/LandingPage';
+import Dashboard from './pages/Dashboard/Dashboard';
+import Login from './pages/Login/Login';         
+import Signup from './pages/Signup/Signup';       
+import DrawPage from './pages/DrawPage/DrawPage';
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -27,7 +27,7 @@ export default function App() {
 
   return (
     <Routes>
-      <Route path="/" element={<Home />} />
+      <Route path="/" element={<LandingPage />} />
       <Route path="/dashboard" element={<Dashboard />} />
       <Route path="/login" element={<Login />} />
       <Route path="/signup" element={<Signup />} />

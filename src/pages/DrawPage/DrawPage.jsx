@@ -8,8 +8,8 @@ import {
   addDoc,
   serverTimestamp,
 } from "firebase/firestore";
-import { db } from "../firebase";
-import Canvas from "../components/Canvas";
+import { db } from "../../firebase";
+import Canvas from "../../components/Canvas";
 
 export default function DrawPage() {
   const { creatorId, datasetId } = useParams();
@@ -27,6 +27,16 @@ export default function DrawPage() {
         const snap = await getDoc(docRef);
         if (snap.exists()) {
           setCreatorData(snap.data());
+
+          const data = snap.data();
+
+          // If shuffleMode is true, shuffle the prompts
+          const prompts = data.prompts || [];
+          if (data.shuffleMode) {
+            data.prompts = [...prompts].sort(() => Math.random() - 0.5);
+          }
+
+          setCreatorData(data);
           console.log("Fetched dataset:", snap.data());
         } else {
           setCreatorData(null);

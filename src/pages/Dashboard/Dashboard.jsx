@@ -9,7 +9,7 @@ import {
   getDocs,
   deleteDoc,
 } from "firebase/firestore";
-import { db } from "../firebase";
+import { db } from "../../firebase";
 import { getAuth, signOut } from "firebase/auth";
 import QRCode from "react-qr-code";
 import { useLocation } from "react-router-dom";
@@ -19,7 +19,7 @@ import JSZip from "jszip";
 import { saveAs } from "file-saver";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 
-import DrawExampleModal from "../components/DrawExampleModal";
+import DrawExampleModal from "../../components/DrawExampleModal";
 
 export default function Dashboard() {
   const auth = getAuth();
@@ -38,6 +38,7 @@ export default function Dashboard() {
   const [datasets, setDatasets] = useState([]);
   const [selectedDatasetId, setSelectedDatasetId] = useState(null);
   const [selectedDataset, setSelectedDataset] = useState(null);
+  const [shuffleMode, setShuffleMode] = useState(false);
   const [stats, setStats] = useState({
     total: 0,
     perPrompt: {},
@@ -95,6 +96,7 @@ export default function Dashboard() {
           setPrompts(data.prompts || []);
           setOutputSize(data.outputSize || 28);
           setIsOpen(data.isOpen || false);
+          setShuffleMode(data.shuffleMode || false);
         }
         setLoading(false);
       }
@@ -565,6 +567,19 @@ export default function Dashboard() {
       <label>
         <input type="checkbox" checked={isOpen} onChange={handleIsOpenToggle} />
         {isOpen ? "Open for Responses" : "Closed to Responses"}
+      </label>
+      <h2 style={{ marginTop: "2rem" }}>🎲 Shuffle Mode</h2>
+      <label>
+        <input
+          type="checkbox"
+          checked={shuffleMode}
+          onChange={() => {
+            const newVal = !shuffleMode;
+            setShuffleMode(newVal);
+            saveToFirestore({ shuffleMode: newVal }, true); // no validation needed
+          }}
+        />
+        Show prompts in random order for contributors
       </label>
       {isOpen && (
         <>
