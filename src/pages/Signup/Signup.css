@@ -28,7 +28,7 @@
     text-align: center;
   }
   
-  /* NEW: Make the form a flex container that centers items */
+  /* Make the form a flex container that centers items */
   .signup-card form {
     display: flex;
     flex-direction: column;
