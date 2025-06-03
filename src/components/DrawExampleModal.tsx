@@ -1,6 +1,5 @@
 import React, { useRef } from "react";
-import Canvas from "./Canvas";
-import { ReactSketchCanvasRef } from "react-sketch-canvas";
+import Canvas, { CanvasRef } from "./Canvas";
 
 interface DrawExampleModalProps {
   onSave: (base64: string) => void;
@@ -8,12 +7,12 @@ interface DrawExampleModalProps {
 }
 
 export default function DrawExampleModal({ onSave, onClose }: DrawExampleModalProps): JSX.Element {
-  const canvasRef = useRef<ReactSketchCanvasRef>(null);
+  const canvasRef = useRef<CanvasRef>(null);
 
   const handleSave = async (): Promise<void> => {
     try {
-      const paths = await canvasRef.current?.exportPaths();
-      if (!paths || paths.length === 0) {
+      const pixels = await canvasRef.current?.exportPaths();
+      if (!pixels || pixels.length === 0) {
         alert("Please draw something before saving.");
         return;
       }

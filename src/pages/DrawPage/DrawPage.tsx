@@ -1,4 +1,4 @@
-import React, { useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { useEffect, useState, useRef } from "react";
 import {
   doc,
@@ -8,8 +8,7 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 import { db } from "../../firebase";
-import Canvas from "../../components/Canvas";
-import { ReactSketchCanvasRef } from "react-sketch-canvas";
+import Canvas, { CanvasRef } from "../../components/Canvas";
 
 interface Prompt {
   label: string;
@@ -26,7 +25,7 @@ interface CreatorData {
 
 export default function DrawPage(): JSX.Element {
   const { creatorId, datasetId } = useParams<{ creatorId: string; datasetId: string }>();
-  const canvasRef = useRef<ReactSketchCanvasRef>(null);
+  const canvasRef = useRef<CanvasRef>(null);
   const [creatorData, setCreatorData] = useState<CreatorData | null>(null);
   const [currentPromptIndex, setCurrentPromptIndex] = useState<number>(0);
   const [loading, setLoading] = useState<boolean>(true);
@@ -67,8 +66,8 @@ export default function DrawPage(): JSX.Element {
     if (!canvasRef.current || !creatorData) return;
 
     try {
-      const exportData = await canvasRef.current.exportPaths();
-      if (!exportData || exportData.length === 0) {
+      const pixels = await canvasRef.current.exportPaths();
+      if (!pixels || pixels.length === 0) {
         alert("Please draw something before submitting.");
         return;
       }
@@ -76,45 +75,23 @@ export default function DrawPage(): JSX.Element {
       const base64 = await canvasRef.current.exportImage("png");
       if (!base64) return;
 
-      const canvas = document.createElement("canvas");
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return;
+      const promptObj = creatorData.prompts[currentPromptIndex];
+      const label =
+        typeof promptObj === "string"
+          ? promptObj
+          : promptObj.label || `Prompt ${currentPromptIndex + 1}`;
 
-      const img = new Image();
-      img.src = base64;
+      await addDoc(collection(db, "drawings"), {
+        creatorId,
+        datasetId,
+        prompt: label,
+        imageBase64: base64,
+        imagePixels: pixels,
+        createdAt: serverTimestamp(),
+      });
 
-      img.onload = async () => {
-        const size = creatorData.outputSize;
-        canvas.width = size;
-        canvas.height = size;
-        ctx.drawImage(img, 0, 0, size, size);
-
-        const imageData = ctx.getImageData(0, 0, size, size);
-        const pixels: number[] = [];
-
-        for (let i = 0; i < imageData.data.length; i += 4) {
-          const grayscale = imageData.data[i]; // red channel as grayscale
-          pixels.push(grayscale / 255);
-        }
-
-        const promptObj = creatorData.prompts[currentPromptIndex];
-        const label =
-          typeof promptObj === "string"
-            ? promptObj
-            : promptObj.label || `Prompt ${currentPromptIndex + 1}`;
-
-        await addDoc(collection(db, "drawings"), {
-          creatorId,
-          datasetId,
-          prompt: label,
-          imageBase64: base64,
-          imagePixels: pixels,
-          createdAt: serverTimestamp(),
-        });
-
-        await canvasRef.current?.clearCanvas();
-        setCurrentPromptIndex((prev) => prev + 1);
-      };
+      await canvasRef.current.clearCanvas();
+      setCurrentPromptIndex((prev) => prev + 1);
     } catch (err) {
       console.error("Error submitting drawing:", err);
       alert("Something went wrong while submitting your drawing.");
