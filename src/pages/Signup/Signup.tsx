@@ -1,18 +1,25 @@
-import { useState } from 'react';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
+import React, { useState, FormEvent, ChangeEvent } from 'react';
+import { createUserWithEmailAndPassword, UserCredential } from 'firebase/auth';
 import { auth, db } from '../../firebase';
 import { useNavigate } from 'react-router-dom';
 import { doc, setDoc } from 'firebase/firestore';
 import './Signup.css';
 
-export default function Signup() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [error, setError] = useState('');
+interface DatasetData {
+  name: string;
+  prompts: string[];
+  outputSize: number;
+  isOpen: boolean;
+}
+
+export default function Signup(): JSX.Element {
+  const [email, setEmail] = useState<string>('');
+  const [password, setPassword] = useState<string>('');
+  const [confirmPassword, setConfirmPassword] = useState<string>('');
+  const [error, setError] = useState<string>('');
   const navigate = useNavigate();
 
-  const handleSignup = async (e) => {
+  const handleSignup = async (e: FormEvent<HTMLFormElement>): Promise<void> => {
     e.preventDefault();
     if (password !== confirmPassword) {
       setError("Passwords do not match");
@@ -20,21 +27,34 @@ export default function Signup() {
     }
 
     try {
-      const userCred = await createUserWithEmailAndPassword(auth, email, password);
+      const userCred: UserCredential = await createUserWithEmailAndPassword(auth, email, password);
       const userId = userCred.user.uid;
 
       const defaultDatasetRef = doc(db, "creators", userId, "datasets", "default");
-      await setDoc(defaultDatasetRef, {
+      const defaultDataset: DatasetData = {
         name: "Default Dataset",
         prompts: [],
         outputSize: 28,
         isOpen: false,
-      });
-
+      };
+      
+      await setDoc(defaultDatasetRef, defaultDataset);
       navigate("/login");
     } catch (err) {
-      setError(err.message);
+      setError(err instanceof Error ? err.message : 'An error occurred');
     }
+  };
+
+  const handleEmailChange = (e: ChangeEvent<HTMLInputElement>): void => {
+    setEmail(e.target.value);
+  };
+
+  const handlePasswordChange = (e: ChangeEvent<HTMLInputElement>): void => {
+    setPassword(e.target.value);
+  };
+
+  const handleConfirmPasswordChange = (e: ChangeEvent<HTMLInputElement>): void => {
+    setConfirmPassword(e.target.value);
   };
 
   return (
@@ -47,21 +67,21 @@ export default function Signup() {
             placeholder="Email"
             value={email}
             required
-            onChange={(e) => setEmail(e.target.value)}
+            onChange={handleEmailChange}
           />
           <input
             type="password"
             placeholder="Password"
             value={password}
             required
-            onChange={(e) => setPassword(e.target.value)}
+            onChange={handlePasswordChange}
           />
           <input
             type="password"
             placeholder="Confirm Password"
             value={confirmPassword}
             required
-            onChange={(e) => setConfirmPassword(e.target.value)}
+            onChange={handleConfirmPasswordChange}
           />
           {error && <p className="error-msg">{error}</p>}
           <button type="submit">Sign Up</button>
@@ -72,4 +92,4 @@ export default function Signup() {
       </div>
     </div>
   );
-}
+} 

@@ -1,10 +1,10 @@
-// LandingPage.jsx
+import React from "react";
 import "./LandingPage.css";
 import { Link } from "react-router-dom";
 import logo from "../../assets/logo.png";
 import croppedLogo from "../../assets/croppedLogo.png";
 
-export default function LandingPage() {
+export default function LandingPage(): JSX.Element {
   return (
     <div className="landing-wrapper">
       <header className="landing-hero">
@@ -39,4 +39,4 @@ export default function LandingPage() {
       </div>
     </div>
   );
-}
+} 

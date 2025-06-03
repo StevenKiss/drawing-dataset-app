@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import React, { useEffect, useState, ChangeEvent } from "react";
 import {
   doc,
   getDoc,
@@ -8,9 +8,10 @@ import {
   where,
   getDocs,
   deleteDoc,
+  DocumentData,
 } from "firebase/firestore";
 import { db } from "../../firebase";
-import { getAuth, signOut } from "firebase/auth";
+import { getAuth, signOut, User } from "firebase/auth";
 import QRCode from "react-qr-code";
 import { useLocation } from "react-router-dom";
 import Papa from "papaparse";
@@ -21,25 +22,58 @@ import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 
 import DrawExampleModal from "../../components/DrawExampleModal";
 
-export default function Dashboard() {
-  const auth = getAuth();
-  const user = auth.currentUser;
+interface Prompt {
+  label: string;
+  description: string;
+  exampleImage: string | null;
+}
 
-  const [outputSize, setOutputSize] = useState(28);
-  const [isOpen, setIsOpen] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [shareUrl, setShareUrl] = useState("");
-  const [drawings, setDrawings] = useState([]);
-  const [prompts, setPrompts] = useState([
+interface Dataset {
+  id: string;
+  name: string;
+  prompts: Prompt[];
+  outputSize: number;
+  isOpen: boolean;
+  shuffleMode?: boolean;
+}
+
+interface Stats {
+  total: number;
+  perPrompt: Record<string, number>;
+  lastTime: Date | null;
+}
+
+interface Drawing {
+  id: string;
+  prompt: string;
+  data: string;
+  timestamp: number;
+  imagePixels: number[][];
+  imageBase64: string;
+  createdAt?: {
+    toDate: () => Date;
+  };
+}
+
+export default function Dashboard(): React.ReactElement {
+  const auth = getAuth();
+  const user: User | null = auth.currentUser;
+
+  const [outputSize, setOutputSize] = useState<number>(28);
+  const [isOpen, setIsOpen] = useState<boolean>(false);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [shareUrl, setShareUrl] = useState<string>("");
+  const [drawings, setDrawings] = useState<Drawing[]>([]);
+  const [prompts, setPrompts] = useState<Prompt[]>([
     { label: "", description: "", exampleImage: null },
   ]);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingPromptIndex, setEditingPromptIndex] = useState(null);
-  const [datasets, setDatasets] = useState([]);
-  const [selectedDatasetId, setSelectedDatasetId] = useState(null);
-  const [selectedDataset, setSelectedDataset] = useState(null);
-  const [shuffleMode, setShuffleMode] = useState(false);
-  const [stats, setStats] = useState({
+  const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
+  const [editingPromptIndex, setEditingPromptIndex] = useState<number | null>(null);
+  const [datasets, setDatasets] = useState<Dataset[]>([]);
+  const [selectedDatasetId, setSelectedDatasetId] = useState<string | null>(null);
+  const [selectedDataset, setSelectedDataset] = useState<Dataset | null>(null);
+  const [shuffleMode, setShuffleMode] = useState<boolean>(false);
+  const [stats, setStats] = useState<Stats>({
     total: 0,
     perPrompt: {},
     lastTime: null,
@@ -57,7 +91,7 @@ export default function Dashboard() {
         const allDatasets = snapshot.docs.map((doc) => ({
           id: doc.id,
           ...doc.data(),
-        }));
+        })) as Dataset[];
 
         setDatasets(allDatasets);
 
@@ -91,7 +125,7 @@ export default function Dashboard() {
         );
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
-          const data = docSnap.data();
+          const data = docSnap.data() as Dataset;
 
           setPrompts(data.prompts || []);
           setOutputSize(data.outputSize || 28);
@@ -107,7 +141,7 @@ export default function Dashboard() {
   }, [user, selectedDatasetId]);
 
   // Make sure prompt at a minimum
-  const validatePrompts = () => {
+  const validatePrompts = (): boolean => {
     if (prompts.length === 0) {
       alert("You must have at least one prompt.");
       return false;
@@ -123,11 +157,11 @@ export default function Dashboard() {
   };
 
   // Save updates to Firestore
-  const saveToFirestore = async (newData = {}, skipValidation = false) => {
+  const saveToFirestore = async (newData: Partial<Dataset> = {}, skipValidation = false): Promise<void> => {
     if (!user) return;
     if (!skipValidation && !validatePrompts()) return; // prevent save if invalid
 
-    const docRef = doc(db, "creators", user.uid, "datasets", selectedDatasetId);
+    const docRef = doc(db, "creators", user.uid, "datasets", selectedDatasetId!);
     await setDoc(docRef, {
       prompts,
       outputSize,
@@ -137,15 +171,14 @@ export default function Dashboard() {
   };
 
   // To sign out
-  const handleLogout = () => {
+  const handleLogout = async (): Promise<void> => {
     const auth = getAuth();
-    signOut(auth).then(() => {
-      console.log("User signed out");
-      window.location.href = "/login";
-    });
+    await signOut(auth);
+    console.log("User signed out");
+    window.location.href = "/login";
   };
 
-  const addPrompt = () => {
+  const addPrompt = (): void => {
     const updated = [
       ...prompts,
       { label: "", description: "", exampleImage: null },
@@ -154,29 +187,33 @@ export default function Dashboard() {
     saveToFirestore({ prompts: updated }, true);
   };
 
-  const removePrompt = (index) => {
+  const removePrompt = (index: number): void => {
     const updated = prompts.filter((_, i) => i !== index);
     setPrompts(updated);
     saveToFirestore({ prompts: updated }, true);
   };
 
-  // Handle filed change
-  const handleFieldChange = (index, field, value) => {
+  // Handle field change
+  const handleFieldChange = (index: number, field: keyof Prompt, value: string | null): void => {
     const updated = [...prompts];
-    updated[index][field] = value;
+    if (field === 'exampleImage') {
+      updated[index].exampleImage = value;
+    } else {
+      updated[index][field] = value as string;
+    }
     setPrompts(updated);
     saveToFirestore({ prompts: updated }, true);
   };
 
   // Output size change
-  const handleOutputSizeChange = (e) => {
+  const handleOutputSizeChange = (e: ChangeEvent<HTMLInputElement>): void => {
     const size = parseInt(e.target.value, 10);
     setOutputSize(size);
     saveToFirestore({ outputSize: size });
   };
 
   // Link viewage
-  const handleIsOpenToggle = () => {
+  const handleIsOpenToggle = (): void => {
     const newState = !isOpen;
 
     // If opening the link, run validation
@@ -200,23 +237,23 @@ export default function Dashboard() {
   };
 
   // Fetch creator's drawings
-  const fetchDrawings = async () => {
-    if (!user) return;
+  const fetchDrawings = async (): Promise<void> => {
+    if (!user || !selectedDatasetId) return;
     const q = query(
       collection(db, "drawings"),
       where("creatorId", "==", user.uid),
       where("datasetId", "==", selectedDatasetId)
     );
     const snapshot = await getDocs(q);
-    const fetched = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+    const fetched = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })) as Drawing[];
     setDrawings(fetched);
 
     // Compute Stats
-    let promptCounts = {};
-    let latestTime = null;
+    const promptCounts: Record<string, number> = {};
+    let latestTime: Date | null = null;
 
     for (const d of fetched) {
-      promptCounts[d.prompt] = (promptCounts[d.promt] || 0) + 1;
+      promptCounts[d.prompt] = (promptCounts[d.prompt] || 0) + 1;
       if (d.createdAt?.toDate) {
         const t = d.createdAt.toDate();
         if (!latestTime || t > latestTime) {
@@ -233,11 +270,12 @@ export default function Dashboard() {
   };
 
   // Creating a new dataset
-  const handleCreateDataset = async () => {
+  const handleCreateDataset = async (): Promise<void> => {
     if (!user) return;
     const newId = uuidv4();
     const newRef = doc(db, "creators", user.uid, "datasets", newId);
-    const newDataset = {
+    const newDataset: Dataset = {
+      id: newId,
       name: "Untitled Dataset",
       prompts: [],
       outputSize: 28,
@@ -245,11 +283,11 @@ export default function Dashboard() {
     };
     await setDoc(newRef, newDataset);
     setSelectedDatasetId(newId);
-    setDatasets((prev) => [...prev, { id: newId, ...newDataset }]);
+    setDatasets((prev) => [...prev, newDataset]);
   };
 
   // Delete a dataset
-  const handleDeleteDataset = async () => {
+  const handleDeleteDataset = async (): Promise<void> => {
     if (!user || !selectedDatasetId) return;
 
     const confirmDelete = confirm(
@@ -282,7 +320,7 @@ export default function Dashboard() {
   };
 
   // Export button handling
-  const handleExportCSV = (format = "pixels") => {
+  const handleExportCSV = (format: "pixels" | "base64" = "pixels"): void => {
     if (!drawings.length) {
       alert("No drawings to export.");
       return;
@@ -318,14 +356,14 @@ export default function Dashboard() {
   };
 
   // Zip download handling
-  const handleDownloadZip = async () => {
+  const handleDownloadZip = async (): Promise<void> => {
     if (!drawings.length) {
       alert("No drawings to export.");
       return;
     }
 
     const zip = new JSZip();
-    const labels = [];
+    const labels: { filename: string; label: string }[] = [];
 
     for (let i = 0; i < drawings.length; i++) {
       const d = drawings[i];
@@ -346,7 +384,7 @@ export default function Dashboard() {
   };
 
   // Handle JSON export
-  const handleExportJSON = () => {
+  const handleExportJSON = (): void => {
     if (!drawings.length) {
       alert("No drawings to export.");
       return;
@@ -370,8 +408,7 @@ export default function Dashboard() {
     document.body.removeChild(link);
   };
 
-  if (loading)
-    return <div style={{ padding: "2rem" }}>Loading dashboard...</div>;
+  if (loading) return <div style={{ padding: "2rem" }}>Loading dashboard...</div>;
 
   return (
     <div style={{ padding: "2rem" }}>
@@ -391,7 +428,7 @@ export default function Dashboard() {
       </div>
 
       <select
-        value={selectedDatasetId}
+        value={selectedDatasetId || ""}
         onChange={(e) => setSelectedDatasetId(e.target.value)}
       >
         {datasets.map((ds) => (
@@ -414,7 +451,7 @@ export default function Dashboard() {
             )
           );
           await setDoc(
-            doc(db, "creators", user.uid, "datasets", selectedDatasetId),
+            doc(db, "creators", user!.uid, "datasets", selectedDatasetId!),
             { name: newName },
             { merge: true }
           );
@@ -458,7 +495,6 @@ export default function Dashboard() {
                         background: "#f9f9f9",
                       }}
                     >
-                      {/* Prompt UI here */}
                       <input
                         value={prompt.label}
                         onChange={(e) =>
@@ -481,20 +517,19 @@ export default function Dashboard() {
                         rows={3}
                         style={{ width: "100%", marginTop: "0.5rem" }}
                       />
-                      {/* Image upload, draw, remove, etc. */}
                       <label>Upload or draw example:</label>
                       <input
                         type="file"
                         accept="image/*"
                         onChange={(e) => {
-                          const file = e.target.files[0];
+                          const file = e.target.files?.[0];
                           if (file) {
                             const reader = new FileReader();
                             reader.onloadend = () => {
                               handleFieldChange(
                                 index,
                                 "exampleImage",
-                                reader.result
+                                reader.result as string
                               );
                             };
                             reader.readAsDataURL(file);
@@ -553,7 +588,7 @@ export default function Dashboard() {
       <select
         value={outputSize}
         onChange={(e) =>
-          handleOutputSizeChange({ target: { value: e.target.value } })
+          handleOutputSizeChange({ target: { value: e.target.value } } as ChangeEvent<HTMLInputElement>)
         }
       >
         {[28, 32, 64, 128, 256].map((size) => (
@@ -568,6 +603,7 @@ export default function Dashboard() {
         <input type="checkbox" checked={isOpen} onChange={handleIsOpenToggle} />
         {isOpen ? "Open for Responses" : "Closed to Responses"}
       </label>
+
       <h2 style={{ marginTop: "2rem" }}>🎲 Shuffle Mode</h2>
       <label>
         <input
@@ -581,6 +617,7 @@ export default function Dashboard() {
         />
         Show prompts in random order for contributors
       </label>
+
       {isOpen && (
         <>
           <h2 style={{ marginTop: "2rem" }}>📤 Shareable Link</h2>
@@ -596,6 +633,7 @@ export default function Dashboard() {
           <QRCode value={shareUrl} size={160} />
         </>
       )}
+
       <h2 style={{ marginTop: "2rem" }}>📊 Dataset Stats</h2>
       <p>
         <strong>Total Submissions:</strong> {stats.total}
@@ -614,6 +652,7 @@ export default function Dashboard() {
           </li>
         ))}
       </ul>
+
       <h2 style={{ marginTop: "3rem" }}>🧪 Dataset Preview</h2>
       {drawings.length === 0 ? (
         <p>No drawings submitted yet.</p>
@@ -660,19 +699,21 @@ export default function Dashboard() {
                           const totalPixels = flat.length;
                           const size = Math.sqrt(totalPixels); // Recover the original size
                           const ctx = canvas.getContext("2d");
-                          const imgData = ctx.createImageData(size, size);
+                          if (ctx) {
+                            const imgData = ctx.createImageData(size, size);
 
-                          for (let i = 0; i < totalPixels; i++) {
-                            const grayscale = Math.floor(flat[i] * 255);
-                            imgData.data[i * 4 + 0] = grayscale;
-                            imgData.data[i * 4 + 1] = grayscale;
-                            imgData.data[i * 4 + 2] = grayscale;
-                            imgData.data[i * 4 + 3] = 255;
+                            for (let i = 0; i < totalPixels; i++) {
+                              const grayscale = Math.floor(flat[i] * 255);
+                              imgData.data[i * 4 + 0] = grayscale;
+                              imgData.data[i * 4 + 1] = grayscale;
+                              imgData.data[i * 4 + 2] = grayscale;
+                              imgData.data[i * 4 + 3] = 255;
+                            }
+
+                            canvas.width = size;
+                            canvas.height = size;
+                            ctx.putImageData(imgData, 0, 0);
                           }
-
-                          canvas.width = size;
-                          canvas.height = size;
-                          ctx.putImageData(imgData, 0, 0);
                         }
                       }}
                       style={{ border: "1px solid #ccc", cursor: "pointer" }}
@@ -684,6 +725,7 @@ export default function Dashboard() {
           );
         })
       )}
+
       <h2 style={{ marginTop: "3rem" }}>⬇️ Export Dataset</h2>
       <div style={{ display: "flex", gap: "1rem" }}>
         <button onClick={() => handleExportCSV("pixels")}>
@@ -695,6 +737,7 @@ export default function Dashboard() {
         <button onClick={handleDownloadZip}>Download PNGs + Labels ZIP</button>
         <button onClick={handleExportJSON}>Download Tensor JSON</button>
       </div>
+
       <div
         style={{
           marginTop: "4rem",
@@ -716,19 +759,12 @@ export default function Dashboard() {
           🗑️ Delete This Dataset
         </button>
       </div>
-      {isModalOpen && (
+
+      {isModalOpen && editingPromptIndex !== null && (
         <DrawExampleModal
-          onSave={(base64) => {
+          onSave={(base64: string) => {
             const updated = [...prompts];
-            if (typeof updated[editingPromptIndex] === "string") {
-              updated[editingPromptIndex] = {
-                label: updated[editingPromptIndex],
-                description: "",
-                exampleImage: base64,
-              };
-            } else {
-              updated[editingPromptIndex].exampleImage = base64;
-            }
+            updated[editingPromptIndex].exampleImage = base64;
             setPrompts(updated);
             saveToFirestore({ prompts: updated });
           }}
@@ -740,4 +776,4 @@ export default function Dashboard() {
       )}
     </div>
   );
-}
+} 

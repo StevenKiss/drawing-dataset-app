@@ -1,5 +1,4 @@
-// src/pages/DrawPage.jsx
-import { useParams } from "react-router-dom";
+import React, { useParams } from "react-router-dom";
 import { useEffect, useState, useRef } from "react";
 import {
   doc,
@@ -10,13 +9,27 @@ import {
 } from "firebase/firestore";
 import { db } from "../../firebase";
 import Canvas from "../../components/Canvas";
+import { ReactSketchCanvasRef } from "react-sketch-canvas";
 
-export default function DrawPage() {
-  const { creatorId, datasetId } = useParams();
-  const canvasRef = useRef();
-  const [creatorData, setCreatorData] = useState(null);
-  const [currentPromptIndex, setCurrentPromptIndex] = useState(0);
-  const [loading, setLoading] = useState(true);
+interface Prompt {
+  label: string;
+  description?: string;
+  exampleImage?: string;
+}
+
+interface CreatorData {
+  prompts: (Prompt | string)[];
+  outputSize: number;
+  isOpen: boolean;
+  shuffleMode?: boolean;
+}
+
+export default function DrawPage(): JSX.Element {
+  const { creatorId, datasetId } = useParams<{ creatorId: string; datasetId: string }>();
+  const canvasRef = useRef<ReactSketchCanvasRef>(null);
+  const [creatorData, setCreatorData] = useState<CreatorData | null>(null);
+  const [currentPromptIndex, setCurrentPromptIndex] = useState<number>(0);
+  const [loading, setLoading] = useState<boolean>(true);
 
   useEffect(() => {
     const fetchCreator = async () => {
@@ -26,9 +39,7 @@ export default function DrawPage() {
         const docRef = doc(db, "creators", creatorId, "datasets", datasetId);
         const snap = await getDoc(docRef);
         if (snap.exists()) {
-          setCreatorData(snap.data());
-
-          const data = snap.data();
+          const data = snap.data() as CreatorData;
 
           // If shuffleMode is true, shuffle the prompts
           const prompts = data.prompts || [];
@@ -37,7 +48,7 @@ export default function DrawPage() {
           }
 
           setCreatorData(data);
-          console.log("Fetched dataset:", snap.data());
+          console.log("Fetched dataset:", data);
         } else {
           setCreatorData(null);
         }
@@ -52,54 +63,62 @@ export default function DrawPage() {
     fetchCreator();
   }, [creatorId, datasetId]);
 
-  const handleSubmitDrawing = async () => {
+  const handleSubmitDrawing = async (): Promise<void> => {
     if (!canvasRef.current || !creatorData) return;
 
-    const exportData = await canvasRef.current.exportPaths();
-    if (!exportData || exportData.length === 0) {
-      alert("Please draw something before submitting.");
-      return;
-    }
-
-    const base64 = await canvasRef.current.exportImage("png");
-
-    const canvas = document.createElement("canvas");
-    const ctx = canvas.getContext("2d");
-    const img = new Image();
-    img.src = base64;
-
-    img.onload = async () => {
-      const size = creatorData.outputSize;
-      canvas.width = size;
-      canvas.height = size;
-      ctx.drawImage(img, 0, 0, size, size);
-
-      const imageData = ctx.getImageData(0, 0, size, size);
-      const pixels = [];
-
-      for (let i = 0; i < imageData.data.length; i += 4) {
-        const grayscale = imageData.data[i]; // red channel as grayscale
-        pixels.push(grayscale / 255);
+    try {
+      const exportData = await canvasRef.current.exportPaths();
+      if (!exportData || exportData.length === 0) {
+        alert("Please draw something before submitting.");
+        return;
       }
 
-      const promptObj = creatorData.prompts[currentPromptIndex];
-      const label =
-        typeof promptObj === "string"
-          ? promptObj
-          : promptObj.label || `Prompt ${currentPromptIndex + 1}`;
+      const base64 = await canvasRef.current.exportImage("png");
+      if (!base64) return;
 
-      await addDoc(collection(db, "drawings"), {
-        creatorId,
-        datasetId,
-        prompt: label,
-        imageBase64: base64,
-        imagePixels: pixels,
-        createdAt: serverTimestamp(),
-      });
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
 
-      await canvasRef.current.clearCanvas();
-      setCurrentPromptIndex((prev) => prev + 1);
-    };
+      const img = new Image();
+      img.src = base64;
+
+      img.onload = async () => {
+        const size = creatorData.outputSize;
+        canvas.width = size;
+        canvas.height = size;
+        ctx.drawImage(img, 0, 0, size, size);
+
+        const imageData = ctx.getImageData(0, 0, size, size);
+        const pixels: number[] = [];
+
+        for (let i = 0; i < imageData.data.length; i += 4) {
+          const grayscale = imageData.data[i]; // red channel as grayscale
+          pixels.push(grayscale / 255);
+        }
+
+        const promptObj = creatorData.prompts[currentPromptIndex];
+        const label =
+          typeof promptObj === "string"
+            ? promptObj
+            : promptObj.label || `Prompt ${currentPromptIndex + 1}`;
+
+        await addDoc(collection(db, "drawings"), {
+          creatorId,
+          datasetId,
+          prompt: label,
+          imageBase64: base64,
+          imagePixels: pixels,
+          createdAt: serverTimestamp(),
+        });
+
+        await canvasRef.current?.clearCanvas();
+        setCurrentPromptIndex((prev) => prev + 1);
+      };
+    } catch (err) {
+      console.error("Error submitting drawing:", err);
+      alert("Something went wrong while submitting your drawing.");
+    }
   };
 
   if (loading)
@@ -169,4 +188,4 @@ export default function DrawPage() {
       </div>
     </div>
   );
-}
+} 

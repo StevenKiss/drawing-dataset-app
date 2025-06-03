@@ -1,20 +1,28 @@
-import { useRef } from "react";
-import Canvas from "./Canvas"; // reuse your existing Canvas component
+import React, { useRef } from "react";
+import Canvas from "./Canvas";
+import { ReactSketchCanvasRef } from "react-sketch-canvas";
 
-export default function DrawExampleModal({ onSave, onClose }) {
-  const canvasRef = useRef();
+interface DrawExampleModalProps {
+  onSave: (base64: string) => void;
+  onClose: () => void;
+}
 
-  const handleSave = async () => {
+export default function DrawExampleModal({ onSave, onClose }: DrawExampleModalProps): JSX.Element {
+  const canvasRef = useRef<ReactSketchCanvasRef>(null);
+
+  const handleSave = async (): Promise<void> => {
     try {
-      const paths = await canvasRef.current.exportPaths();
+      const paths = await canvasRef.current?.exportPaths();
       if (!paths || paths.length === 0) {
         alert("Please draw something before saving.");
         return;
       }
 
-      const base64 = await canvasRef.current.exportImage("png");
-      onSave(base64);
-      onClose();
+      const base64 = await canvasRef.current?.exportImage("png");
+      if (base64) {
+        onSave(base64);
+        onClose();
+      }
     } catch (err) {
       console.error("Failed to export image:", err);
       alert("Something went wrong while saving the drawing.");
@@ -54,4 +62,4 @@ export default function DrawExampleModal({ onSave, onClose }) {
       </div>
     </div>
   );
-}
+} 

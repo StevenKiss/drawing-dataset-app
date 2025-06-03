@@ -1,22 +1,30 @@
-import { useState } from 'react';
+import React, { useState, FormEvent, ChangeEvent } from 'react';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../../firebase';
 import { useNavigate } from 'react-router-dom';
 
-export default function Login() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+export default function Login(): JSX.Element {
+  const [email, setEmail] = useState<string>('');
+  const [password, setPassword] = useState<string>('');
   const navigate = useNavigate();
 
-  const handleLogin = async (e) => {
+  const handleLogin = async (e: FormEvent<HTMLFormElement>): Promise<void> => {
     e.preventDefault();
     try {
       await signInWithEmailAndPassword(auth, email, password);
       console.log("✅ Logged in");
-      navigate('/dashboard'); // or redirect page
+      navigate('/dashboard');
     } catch (error) {
-      console.error("❌ Login error:", error.message);
+      console.error("❌ Login error:", error instanceof Error ? error.message : 'An error occurred');
     }
+  };
+
+  const handleEmailChange = (e: ChangeEvent<HTMLInputElement>): void => {
+    setEmail(e.target.value);
+  };
+
+  const handlePasswordChange = (e: ChangeEvent<HTMLInputElement>): void => {
+    setPassword(e.target.value);
   };
 
   return (
@@ -28,7 +36,7 @@ export default function Login() {
           placeholder="Email"
           value={email}
           required
-          onChange={(e) => setEmail(e.target.value)}
+          onChange={handleEmailChange}
         />
         <br />
         <input
@@ -36,11 +44,11 @@ export default function Login() {
           placeholder="Password"
           value={password}
           required
-          onChange={(e) => setPassword(e.target.value)}
+          onChange={handlePasswordChange}
         />
         <br />
         <button type="submit">Log In</button>
       </form>
     </div>
   );
-}
+} 
