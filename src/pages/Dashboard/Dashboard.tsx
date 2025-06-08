@@ -561,7 +561,23 @@ export default function Dashboard(): React.ReactElement {
               </CardHeader>
               <CardContent className="space-y-4">
                 <Label>Link</Label>
-                <div className="p-2 bg-gray-50 rounded border text-xs break-all mb-4">{shareUrl}</div>
+                <div className="flex items-center w-full gap-2 mb-4">
+                  <input
+                    type="text"
+                    readOnly
+                    value={shareUrl}
+                    className="w-full p-2 bg-gray-50 rounded-l border border-green-200 text-xs break-all focus:outline-none"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="border-green-200 rounded-r px-3 py-1 text-xs font-medium bg-white hover:bg-green-50 transition"
+                    onClick={() => navigator.clipboard.writeText(shareUrl)}
+                  >
+                    Copy
+                  </Button>
+                </div>
                 <div className="flex flex-col items-center">
                   <QRCode value={shareUrl} size={128} />
                   <Button
