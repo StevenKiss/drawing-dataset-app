@@ -484,16 +484,17 @@ export default function Dashboard(): React.ReactElement {
                                   </Button>
                                 </div>
                                 {p.exampleImage && (
-                                  <div className="mt-2">
+                                  <div className="mt-3">
                                     <img
                                       src={p.exampleImage}
                                       alt="example"
-                                      className="max-w-[100px] border border-gray-300"
+                                      className="max-w-[100px] border border-gray-300 mb-3"
                                     />
                                     <div>
                                       <Button
-                                        variant="link"
+                                        variant="outline"
                                         size="sm"
+                                        className="border-green-200 text-red-600 hover:bg-red-50"
                                         onClick={() => handleFieldChange(i, "exampleImage", null)}
                                       >
                                         Remove
