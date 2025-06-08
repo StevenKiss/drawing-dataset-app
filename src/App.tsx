@@ -1,56 +1,36 @@
-import React from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
-import { useEffect, useState } from 'react';
-import { getAuth, onAuthStateChanged, User } from 'firebase/auth';
 
-import LandingPage from './pages/LandingPage/LandingPage';
-import Dashboard from './pages/Dashboard/Dashboard';
-import Login from './pages/Login/Login';         
-import Signup from './pages/Signup/Signup';       
-import DrawPage from './pages/DrawPage/DrawPage';
+import { Toaster } from "@/components/ui/toaster";
+import { Toaster as Sonner } from "@/components/ui/sonner";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
+import LandingPage from "./pages/LandingPage/LandingPage";
+import Login from "./pages/Login/Login";
+import Signup from "./pages/Signup/Signup";
+import Dashboard from "./pages/Dashboard/Dashboard";
+import DrawPage from "./pages/DrawPage/DrawPage";
+import NotFound from "./pages/NotFound";
 
-interface ProtectedRouteProps {
-  children: React.ReactNode;
-  user: User | null;
-}
+const queryClient = new QueryClient();
 
-const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, user }) => {
-  if (!user) {
-    return <Navigate to="/login" replace />;
-  }
-  return <>{children}</>;
-};
+const App = () => (
+  <QueryClientProvider client={queryClient}>
+    <TooltipProvider>
+      <Toaster />
+      <Sonner />
+      <BrowserRouter>
+        <Routes>
+          <Route path="/" element={<LandingPage />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/signup" element={<Signup />} />
+          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/draw/:creatorId/:datasetId" element={<DrawPage />} />
+          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+          <Route path="*" element={<NotFound />} />
+        </Routes>
+      </BrowserRouter>
+    </TooltipProvider>
+  </QueryClientProvider>
+);
 
-export default function App(): React.ReactElement {
-  const [user, setUser] = useState<User | null>(null);
-  const [authChecked, setAuthChecked] = useState<boolean>(false);
-
-  useEffect(() => {
-    const auth = getAuth();
-    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
-      setUser(firebaseUser);
-      setAuthChecked(true);
-    });
-
-    return () => unsubscribe();
-  }, []);
-
-  if (!authChecked) return <div>Loading...</div>
-
-  return (
-    <Routes>
-      <Route path="/" element={<LandingPage />} />
-      <Route 
-        path="/dashboard" 
-        element={
-          <ProtectedRoute user={user}>
-            <Dashboard />
-          </ProtectedRoute>
-        } 
-      />
-      <Route path="/login" element={<Login />} />
-      <Route path="/signup" element={<Signup />} />
-      <Route path="/draw/:creatorId/:datasetId" element={<DrawPage />} />
-    </Routes>
-  );
-} 
+export default App;

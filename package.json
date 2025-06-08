@@ -11,9 +11,22 @@
   },
   "dependencies": {
     "@hello-pangea/dnd": "^18.0.1",
+    "@radix-ui/react-label": "^2.1.7",
+    "@radix-ui/react-select": "^2.2.5",
+    "@radix-ui/react-separator": "^1.1.7",
+    "@radix-ui/react-slot": "^1.2.3",
+    "@radix-ui/react-switch": "^1.2.5",
+    "@radix-ui/react-toast": "^1.2.14",
+    "@radix-ui/react-tooltip": "^1.2.7",
+    "@tanstack/react-query": "^5.80.6",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
     "file-saver": "^2.0.5",
     "firebase": "^11.6.0",
     "jszip": "^3.10.1",
+    "lovable-tagger": "^1.1.8",
+    "lucide-react": "^0.513.0",
+    "next-themes": "^0.4.6",
     "papaparse": "^5.5.2",
     "qrcode.react": "^4.2.0",
     "react": "^18.2.0",
@@ -21,16 +34,22 @@
     "react-qr-code": "^2.0.15",
     "react-router-dom": "^7.5.0",
     "react-sketch-canvas": "^6.2.0",
+    "sonner": "^2.0.5",
+    "tailwind-merge": "^3.3.0",
+    "tailwindcss-animate": "^1.0.7",
     "uuid": "^11.1.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.21.0",
+    "@tailwindcss/postcss": "^4.1.8",
+    "@tailwindcss/vite": "^4.1.8",
     "@types/file-saver": "^2.0.7",
     "@types/node": "^22.15.29",
     "@types/papaparse": "^5.3.16",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
     "@vitejs/plugin-react": "^4.3.4",
+    "@vitejs/plugin-react-swc": "^3.10.1",
     "autoprefixer": "^10.4.21",
     "eslint": "^9.21.0",
     "eslint-plugin-react-hooks": "^5.1.0",
@@ -39,6 +58,6 @@
     "postcss": "^8.5.4",
     "tailwindcss": "^4.1.8",
     "typescript": "^5.8.3",
-    "vite": "^6.2.0"
+    "vite": "^5.0.0"
   }
 }
