@@ -1,3 +1,4 @@
+// src/pages/Dashboard/Dashboard.tsx
 import React, { useEffect, useState, ChangeEvent } from "react";
 import {
   doc,
@@ -8,19 +9,55 @@ import {
   where,
   getDocs,
   deleteDoc,
-  DocumentData,
 } from "firebase/firestore";
-import { db } from "../../firebase";
 import { getAuth, signOut, User } from "firebase/auth";
-import QRCode from "react-qr-code";
 import { useLocation } from "react-router-dom";
+import QRCode from "react-qr-code";
 import Papa from "papaparse";
 import { v4 as uuidv4 } from "uuid";
 import JSZip from "jszip";
 import { saveAs } from "file-saver";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
-
 import DrawExampleModal from "../../components/DrawExampleModal";
+import { db } from "../../firebase";
+
+// ShadCN UI components & icons
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import {
+  LogOut,
+  Plus,
+  Trash2,
+  Edit3,
+  Download,
+  QrCode as IconQrCode,
+  BarChart3,
+  Image as IconImage,
+  Settings,
+  Lock,
+  Unlock,
+  Shuffle,
+  Upload,
+} from "lucide-react";
 
 interface Prompt {
   label: string;
@@ -46,109 +83,94 @@ interface Stats {
 interface Drawing {
   id: string;
   prompt: string;
-  data: string;
-  timestamp: number;
   imagePixels: number[][];
   imageBase64: string;
-  createdAt?: {
-    toDate: () => Date;
-  };
+  createdAt?: { toDate: () => Date };
 }
 
 export default function Dashboard(): React.ReactElement {
   const auth = getAuth();
   const user: User | null = auth.currentUser;
+  const location = useLocation();
 
+  const [datasets, setDatasets] = useState<Dataset[]>([]);
+  const [selectedDatasetId, setSelectedDatasetId] = useState<string>("");
+  const [prompts, setPrompts] = useState<Prompt[]>([]);
   const [outputSize, setOutputSize] = useState<number>(28);
   const [isOpen, setIsOpen] = useState<boolean>(false);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [shareUrl, setShareUrl] = useState<string>("");
-  const [drawings, setDrawings] = useState<Drawing[]>([]);
-  const [prompts, setPrompts] = useState<Prompt[]>([
-    { label: "", description: "", exampleImage: null },
-  ]);
-  const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
-  const [editingPromptIndex, setEditingPromptIndex] = useState<number | null>(null);
-  const [datasets, setDatasets] = useState<Dataset[]>([]);
-  const [selectedDatasetId, setSelectedDatasetId] = useState<string | null>(null);
-  const [selectedDataset, setSelectedDataset] = useState<Dataset | null>(null);
   const [shuffleMode, setShuffleMode] = useState<boolean>(false);
+  const [shareUrl, setShareUrl] = useState<string>("");
   const [stats, setStats] = useState<Stats>({
     total: 0,
     perPrompt: {},
     lastTime: null,
   });
+  const [drawings, setDrawings] = useState<Drawing[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
+  const [editingPromptIndex, setEditingPromptIndex] = useState<number | null>(null);
 
-  const location = useLocation();
-
-  // Fetch the default set to start
+  // Fetch all datasets, pick default on mount
   useEffect(() => {
-    const fetchInitialDataset = async () => {
-      if (user) {
-        // Fetch all datasets
-        const datasetQuery = collection(db, "creators", user.uid, "datasets");
-        const snapshot = await getDocs(datasetQuery);
-        const allDatasets = snapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        })) as Dataset[];
-
-        setDatasets(allDatasets);
-
-        const defaultDataset =
-          allDatasets.find((d) => d.id === "default") || allDatasets[0];
-        if (defaultDataset) {
-          setSelectedDatasetId(defaultDataset.id);
-        }
-      }
-    };
-
-    fetchInitialDataset();
+    async function fetchDatasets() {
+      if (!user) return;
+      const snap = await getDocs(collection(db, "creators", user.uid, "datasets"));
+      const all = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Dataset) }));
+      setDatasets(all);
+      const def = all.find((d) => d.id === "default") || all[0];
+      if (def) setSelectedDatasetId(def.id);
+    }
+    fetchDatasets();
   }, [user]);
 
-  // Fetch dashboard state from Firestore on mount
+  // When selectedDatasetId changes, load its config + drawings
   useEffect(() => {
-    const fetchData = async () => {
-      if (user && selectedDatasetId) {
-        // Create link for other to draw with
-        const baseUrl = window.location.origin;
-        const link = `${baseUrl}/draw/${user.uid}/${selectedDatasetId}`;
-        setShareUrl(link);
-
-        // Access database
-        const docRef = doc(
-          db,
-          "creators",
-          user.uid,
-          "datasets",
-          selectedDatasetId
-        );
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          const data = docSnap.data() as Dataset;
-
-          setPrompts(data.prompts || []);
-          setOutputSize(data.outputSize || 28);
-          setIsOpen(data.isOpen || false);
-          setShuffleMode(data.shuffleMode || false);
-        }
-        setLoading(false);
+    async function loadDataset() {
+      if (!user || !selectedDatasetId) return;
+      // share link
+      setShareUrl(`${window.location.origin}/draw/${user.uid}/${selectedDatasetId}`);
+      // config
+      const ref = doc(db, "creators", user.uid, "datasets", selectedDatasetId);
+      const snap = await getDoc(ref);
+      if (snap.exists()) {
+        const data = snap.data() as Dataset;
+        setPrompts(data.prompts || []);
+        setOutputSize(data.outputSize || 28);
+        setIsOpen(data.isOpen || false);
+        setShuffleMode(data.shuffleMode || false);
       }
-    };
+      // drawings & stats
+      const q = query(
+        collection(db, "drawings"),
+        where("creatorId", "==", user.uid),
+        where("datasetId", "==", selectedDatasetId)
+      );
+      const dsnap = await getDocs(q);
+      const fetched = dsnap.docs.map((d) => ({ id: d.id, ...(d.data() as Drawing) }));
+      setDrawings(fetched);
+      const counts: Record<string, number> = {};
+      let last: Date | null = null;
+      for (const d of fetched) {
+        counts[d.prompt] = (counts[d.prompt] || 0) + 1;
+        if (d.createdAt?.toDate) {
+          const t = d.createdAt.toDate();
+          if (!last || t > last) last = t;
+        }
+      }
+      setStats({ total: fetched.length, perPrompt: counts, lastTime: last });
+      setLoading(false);
+    }
+    loadDataset();
+  }, [selectedDatasetId, user]);
 
-    fetchData();
-    fetchDrawings();
-  }, [user, selectedDatasetId]);
-
-  // Make sure prompt at a minimum
+  // Helpers
   const validatePrompts = (): boolean => {
     if (prompts.length === 0) {
       alert("You must have at least one prompt.");
       return false;
     }
     for (let i = 0; i < prompts.length; i++) {
-      const label = prompts[i]?.label?.trim();
-      if (!label) {
+      if (!prompts[i].label.trim()) {
         alert(`Prompt ${i + 1} is missing a label.`);
         return false;
       }
@@ -156,617 +178,480 @@ export default function Dashboard(): React.ReactElement {
     return true;
   };
 
-  // Save updates to Firestore
-  const saveToFirestore = async (newData: Partial<Dataset> = {}, skipValidation = false): Promise<void> => {
-    if (!user) return;
-    if (!skipValidation && !validatePrompts()) return; // prevent save if invalid
+  async function saveToFirestore(newData: Partial<Dataset> = {}, skipVal = false) {
+    if (!user || !selectedDatasetId) return;
+    if (!skipVal && !validatePrompts()) return;
+    const ref = doc(db, "creators", user.uid, "datasets", selectedDatasetId);
+    await setDoc(ref, { prompts, outputSize, isOpen, shuffleMode, ...newData }, { merge: true });
+  }
 
-    const docRef = doc(db, "creators", user.uid, "datasets", selectedDatasetId!);
-    await setDoc(docRef, {
-      prompts,
-      outputSize,
-      isOpen,
-      ...newData,
-    });
-  };
-
-  // To sign out
-  const handleLogout = async (): Promise<void> => {
-    const auth = getAuth();
+  const handleLogout = async () => {
     await signOut(auth);
-    console.log("User signed out");
     window.location.href = "/login";
   };
-
-  const addPrompt = (): void => {
-    const updated = [
-      ...prompts,
-      { label: "", description: "", exampleImage: null },
-    ];
-    setPrompts(updated);
-    saveToFirestore({ prompts: updated }, true);
+  const handleCreateDataset = async () => {
+    if (!user) return;
+    const id = uuidv4();
+    const ref = doc(db, "creators", user.uid, "datasets", id);
+    const newDs: Dataset = { id, name: "Untitled Dataset", prompts: [], outputSize: 28, isOpen: false };
+    await setDoc(ref, newDs);
+    setDatasets((d) => [...d, newDs]);
+    setSelectedDatasetId(id);
+  };
+  const handleDeleteDataset = async () => {
+    if (!user || !selectedDatasetId) return;
+    if (!confirm("Are you sure you want to delete this dataset?")) return;
+    await deleteDoc(doc(db, "creators", user.uid, "datasets", selectedDatasetId));
+    const rem = datasets.filter((d) => d.id !== selectedDatasetId);
+    setDatasets(rem);
+    setSelectedDatasetId(rem[0]?.id || "");
   };
 
-  const removePrompt = (index: number): void => {
-    const updated = prompts.filter((_, i) => i !== index);
-    setPrompts(updated);
-    saveToFirestore({ prompts: updated }, true);
+  const addPrompt = () => {
+    setPrompts((p) => {
+      const next = [...p, { label: "", description: "", exampleImage: null }];
+      saveToFirestore({ prompts: next }, true);
+      return next;
+    });
   };
-
-  // Handle field change
-  const handleFieldChange = (index: number, field: keyof Prompt, value: string | null): void => {
-    const updated = [...prompts];
-    if (field === 'exampleImage') {
-      updated[index].exampleImage = value;
-    } else {
-      updated[index][field] = value as string;
-    }
-    setPrompts(updated);
-    saveToFirestore({ prompts: updated }, true);
+  const removePrompt = (i: number) => {
+    setPrompts((p) => {
+      const next = p.filter((_, idx) => idx !== i);
+      saveToFirestore({ prompts: next }, true);
+      return next;
+    });
   };
-
-  // Output size change
-  const handleOutputSizeChange = (e: ChangeEvent<HTMLInputElement>): void => {
-    const size = parseInt(e.target.value, 10);
+  const handleFieldChange = (
+    i: number,
+    field: keyof Prompt,
+    val: string | null
+  ) => {
+    setPrompts((p) => {
+      const next = [...p];
+      // @ts-ignore
+      next[i][field] = val;
+      saveToFirestore({ prompts: next }, true);
+      return next;
+    });
+  };
+  const handleOutputSizeChange = (val: string) => {
+    const size = parseInt(val, 10);
     setOutputSize(size);
     saveToFirestore({ outputSize: size });
   };
-
-  // Link viewage
-  const handleIsOpenToggle = (): void => {
-    const newState = !isOpen;
-
-    // If opening the link, run validation
-    if (newState) {
-      if (prompts.length === 0) {
-        alert("You must have at least one prompt.");
-        return;
-      }
-
-      for (let i = 0; i < prompts.length; i++) {
-        const label = prompts[i].label?.trim();
-        if (!label) {
-          alert(`Prompt ${i + 1} is missing a label.`);
-          return;
-        }
-      }
-    }
-
-    setIsOpen(newState);
-    saveToFirestore({ isOpen: newState });
+  const handleIsOpenToggle = () => {
+    const next = !isOpen;
+    if (next && !validatePrompts()) return;
+    setIsOpen(next);
+    saveToFirestore({ isOpen: next });
+  };
+  const handleShuffleToggle = (val: boolean) => {
+    setShuffleMode(val);
+    saveToFirestore({ shuffleMode: val });
   };
 
-  // Fetch creator's drawings
-  const fetchDrawings = async (): Promise<void> => {
-    if (!user || !selectedDatasetId) return;
-    const q = query(
-      collection(db, "drawings"),
-      where("creatorId", "==", user.uid),
-      where("datasetId", "==", selectedDatasetId)
-    );
-    const snapshot = await getDocs(q);
-    const fetched = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })) as Drawing[];
-    setDrawings(fetched);
-
-    // Compute Stats
-    const promptCounts: Record<string, number> = {};
-    let latestTime: Date | null = null;
-
-    for (const d of fetched) {
-      promptCounts[d.prompt] = (promptCounts[d.prompt] || 0) + 1;
-      if (d.createdAt?.toDate) {
-        const t = d.createdAt.toDate();
-        if (!latestTime || t > latestTime) {
-          latestTime = t;
-        }
+  const handleExportCSV = (format: "pixels" | "base64") => {
+    if (!drawings.length) return alert("No drawings.");
+    const rows = drawings.map((d) => {
+      if (format === "pixels") {
+        const flat = d.imagePixels.flat();
+        return {
+          label: d.prompt,
+          ...Object.fromEntries(flat.map((v, i) => [`pixel_${i}`, v])),
+        };
       }
-    }
-
-    setStats({
-      total: fetched.length,
-      perPrompt: promptCounts,
-      lastTime: latestTime,
+      return { label: d.prompt, imageBase64: d.imageBase64 };
     });
-  };
-
-  // Creating a new dataset
-  const handleCreateDataset = async (): Promise<void> => {
-    if (!user) return;
-    const newId = uuidv4();
-    const newRef = doc(db, "creators", user.uid, "datasets", newId);
-    const newDataset: Dataset = {
-      id: newId,
-      name: "Untitled Dataset",
-      prompts: [],
-      outputSize: 28,
-      isOpen: false,
-    };
-    await setDoc(newRef, newDataset);
-    setSelectedDatasetId(newId);
-    setDatasets((prev) => [...prev, newDataset]);
-  };
-
-  // Delete a dataset
-  const handleDeleteDataset = async (): Promise<void> => {
-    if (!user || !selectedDatasetId) return;
-
-    const confirmDelete = confirm(
-      "Are you sure you want to delete this dataset? This cannot be undone."
-    );
-    if (!confirmDelete) return;
-
-    // Delete dataset document
-    await deleteDoc(
-      doc(db, "creators", user.uid, "datasets", selectedDatasetId)
-    );
-
-    // Remove from local state
-    const remaining = datasets.filter((ds) => ds.id !== selectedDatasetId);
-    setDatasets(remaining);
-
-    // Select another dataset or reset
-    if (remaining.length > 0) {
-      setSelectedDatasetId(remaining[0].id);
-    } else {
-      setSelectedDatasetId(null);
-      setPrompts([]);
-      setOutputSize(28);
-      setIsOpen(false);
-      setShareUrl("");
-      setDrawings([]);
-    }
-
-    console.log("✅ Dataset deleted");
-  };
-
-  // Export button handling
-  const handleExportCSV = (format: "pixels" | "base64" = "pixels"): void => {
-    if (!drawings.length) {
-      alert("No drawings to export.");
-      return;
-    }
-
-    const rows = drawings
-      .map((drawing) => {
-        const label = drawing.prompt;
-        if (format === "pixels") {
-          const flatPixels = drawing.imagePixels.flat(); // ensure 1D
-          return {
-            label,
-            ...Object.fromEntries(
-              flatPixels.map((val, i) => [`pixel_${i}`, val])
-            ),
-          };
-        } else if (format === "base64") {
-          return { label, imageBase64: drawing.imageBase64 };
-        }
-        return null;
-      })
-      .filter(Boolean);
-
     const csv = Papa.unparse(rows);
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.setAttribute("download", `dataset_${format}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    saveAs(blob, `dataset_${format}.csv`);
   };
-
-  // Zip download handling
-  const handleDownloadZip = async (): Promise<void> => {
-    if (!drawings.length) {
-      alert("No drawings to export.");
-      return;
-    }
-
+  const handleDownloadZip = async () => {
+    if (!drawings.length) return alert("No drawings.");
     const zip = new JSZip();
     const labels: { filename: string; label: string }[] = [];
-
     for (let i = 0; i < drawings.length; i++) {
       const d = drawings[i];
-      const fileName = `img_${i + 1}.png`;
-      labels.push({ filename: fileName, label: d.prompt });
-
-      // Add image to zip
-      const base64Data = d.imageBase64.split(",")[1]; // Remove data:image/... part
-      zip.file(fileName, base64Data, { base64: true });
+      const name = `img_${i + 1}.png`;
+      labels.push({ filename: name, label: d.prompt });
+      const data = d.imageBase64.split(",")[1];
+      zip.file(name, data, { base64: true });
     }
-
-    // Add labels.csv
-    const csv = Papa.unparse(labels);
-    zip.file("labels.csv", csv);
-
+    zip.file("labels.csv", Papa.unparse(labels));
     const blob = await zip.generateAsync({ type: "blob" });
     saveAs(blob, "dataset.zip");
   };
-
-  // Handle JSON export
-  const handleExportJSON = (): void => {
-    if (!drawings.length) {
-      alert("No drawings to export.");
-      return;
-    }
-
-    const jsonData = drawings.map((d) => ({
-      label: d.prompt,
-      pixels: d.imagePixels,
-    }));
-
-    const blob = new Blob([JSON.stringify(jsonData, null, 2)], {
-      type: "application/json",
-    });
-
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.setAttribute("download", "dataset.json");
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  const handleExportJSON = () => {
+    if (!drawings.length) return alert("No drawings.");
+    const data = drawings.map((d) => ({ label: d.prompt, pixels: d.imagePixels }));
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    saveAs(blob, "dataset.json");
   };
 
   if (loading) return <div style={{ padding: "2rem" }}>Loading dashboard...</div>;
 
+  const selected = datasets.find((d) => d.id === selectedDatasetId);
+
   return (
-    <div style={{ padding: "2rem" }}>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: "1rem",
-        }}
-      >
-        <h1>Dataset Creator Dashboard</h1>
-        <button onClick={handleLogout} style={{ padding: "0.5rem 1rem" }}>
-          🚪 Log Out
-        </button>
-        <button onClick={handleCreateDataset}>➕ Create New Dataset</button>
-      </div>
+    <div className="min-h-screen bg-gradient-to-br from-green-50 via-white to-green-50">
+      {/* Header */}
+      <header className="bg-white/80 backdrop-blur-sm border-b border-green-100 sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+          <h1 className="text-2xl font-bold text-green-800">DoodleVault</h1>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={handleCreateDataset}>
+              <Plus className="mr-2 h-4 w-4" /> New Dataset
+            </Button>
+            <Button variant="outline" onClick={handleLogout}>
+              <LogOut className="mr-2 h-4 w-4" /> Sign Out
+            </Button>
+          </div>
+        </div>
+      </header>
 
-      <select
-        value={selectedDatasetId || ""}
-        onChange={(e) => setSelectedDatasetId(e.target.value)}
-      >
-        {datasets.map((ds) => (
-          <option key={ds.id} value={ds.id}>
-            {ds.name || ds.id}
-          </option>
-        ))}
-      </select>
+      <div className="max-w-7xl mx-auto px-6 py-8 grid lg:grid-cols-3 gap-8">
+        {/* Main */}
+        <div className="lg:col-span-2 space-y-6">
+          {/* Dataset Settings */}
+          <Card className="border-green-100">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Settings className="h-5 w-5 text-green-600" /> Dataset Settings
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <Label>Select Dataset</Label>
+                <Select value={selectedDatasetId} onValueChange={setSelectedDatasetId}>
+                  <SelectTrigger className="border-green-200 bg-white">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-white border-green-200">
+                    {datasets.map((ds) => (
+                      <SelectItem key={ds.id} value={ds.id}>
+                        {ds.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Dataset Name</Label>
+                <Input
+                  value={selected?.name || ""}
+                  onChange={async (e) => {
+                    const name = e.target.value;
+                    setDatasets((d) => d.map((x) => (x.id === selectedDatasetId ? { ...x, name } : x)));
+                    await setDoc(
+                      doc(db, "creators", user!.uid, "datasets", selectedDatasetId),
+                      { name },
+                      { merge: true }
+                    );
+                  }}
+                  className="border-green-200"
+                />
+              </div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label className="flex items-center gap-2">
+                    {isOpen ? (
+                      <Unlock className="h-4 w-4 text-green-600" />
+                    ) : (
+                      <Lock className="h-4 w-4 text-gray-400" />
+                    )}
+                    {isOpen ? "Open for submissions" : "Closed to submissions"}
+                  </Label>
+                </div>
+                <Switch checked={isOpen} onCheckedChange={handleIsOpenToggle} />
+              </div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label className="flex items-center gap-2">
+                    <Shuffle className={`h-4 w-4 ${shuffleMode ? "text-green-600" : "text-gray-400"}`} /> Shuffle Mode
+                  </Label>
+                </div>
+                <Switch checked={shuffleMode} onCheckedChange={handleShuffleToggle} />
+              </div>
+            </CardContent>
+          </Card>
 
-      <input
-        type="text"
-        value={
-          datasets.find((ds) => ds.id === selectedDatasetId)?.name || "Untitled"
-        }
-        onChange={async (e) => {
-          const newName = e.target.value;
-          setDatasets((prev) =>
-            prev.map((ds) =>
-              ds.id === selectedDatasetId ? { ...ds, name: newName } : ds
-            )
-          );
-          await setDoc(
-            doc(db, "creators", user!.uid, "datasets", selectedDatasetId!),
-            { name: newName },
-            { merge: true }
-          );
-        }}
-        style={{ fontSize: "1.2rem", marginBottom: "1rem" }}
-      />
-
-      <h2>✏️ Drawing Prompts</h2>
-      <DragDropContext
-        onDragEnd={(result) => {
-          const { source, destination } = result;
-          if (!destination) return;
-
-          const reordered = Array.from(prompts);
-          const [moved] = reordered.splice(source.index, 1);
-          reordered.splice(destination.index, 0, moved);
-
-          setPrompts(reordered);
-          saveToFirestore({ prompts: reordered }, true); // Skip validation on reorder
-        }}
-      >
-        <Droppable droppableId="promptList">
-          {(provided) => (
-            <div ref={provided.innerRef} {...provided.droppableProps}>
-              {prompts.map((prompt, index) => (
-                <Draggable
-                  key={index}
-                  draggableId={`prompt-${index}`}
-                  index={index}
-                >
+          {/* Drawing Prompts */}
+          <Card className="border-green-100">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Edit3 className="h-5 w-5 text-green-600" /> Drawing Prompts
+              </CardTitle>
+              <CardDescription>Create prompts for contributors to draw</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <DragDropContext
+                onDragEnd={({ source, destination }) => {
+                  if (!destination) return;
+                  const reordered = Array.from(prompts);
+                  const [moved] = reordered.splice(source.index, 1);
+                  reordered.splice(destination.index, 0, moved);
+                  setPrompts(reordered);
+                  saveToFirestore({ prompts: reordered }, true);
+                }}
+              >
+                <Droppable droppableId="prompts">
                   {(provided) => (
-                    <div
-                      ref={provided.innerRef}
-                      {...provided.draggableProps}
-                      {...provided.dragHandleProps}
-                      style={{
-                        ...provided.draggableProps.style,
-                        marginBottom: "1rem",
-                        padding: "1rem",
-                        border: "1px solid #ccc",
-                        background: "#f9f9f9",
-                      }}
-                    >
-                      <input
-                        value={prompt.label}
-                        onChange={(e) =>
-                          handleFieldChange(index, "label", e.target.value)
-                        }
-                        placeholder={`Prompt Label`}
-                        style={{ marginRight: "0.5rem", width: "200px" }}
-                      />
-                      <br />
-                      <textarea
-                        value={prompt.description}
-                        onChange={(e) =>
-                          handleFieldChange(
-                            index,
-                            "description",
-                            e.target.value.slice(0, 200)
-                          )
-                        }
-                        placeholder="Description (max 200 chars)"
-                        rows={3}
-                        style={{ width: "100%", marginTop: "0.5rem" }}
-                      />
-                      <label>Upload or draw example:</label>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) {
-                            const reader = new FileReader();
-                            reader.onloadend = () => {
-                              handleFieldChange(
-                                index,
-                                "exampleImage",
-                                reader.result as string
-                              );
-                            };
-                            reader.readAsDataURL(file);
-                          }
-                        }}
-                      />
-                      <button
-                        style={{ marginLeft: "1rem" }}
-                        onClick={() => {
-                          setEditingPromptIndex(index);
-                          setIsModalOpen(true);
-                        }}
-                      >
-                        ✏️ Draw Instead
-                      </button>
-                      {prompt.exampleImage && (
-                        <div style={{ marginTop: "0.5rem" }}>
-                          <img
-                            src={prompt.exampleImage}
-                            alt="example"
-                            style={{
-                              maxWidth: "100px",
-                              border: "1px solid #aaa",
-                            }}
-                          />
-                          <br />
-                          <button
-                            onClick={() =>
-                              handleFieldChange(index, "exampleImage", null)
-                            }
-                          >
-                            Remove Image
-                          </button>
-                        </div>
-                      )}
-                      <br />
-                      <button
-                        onClick={() => removePrompt(index)}
-                        style={{ marginTop: "0.5rem" }}
-                      >
-                        Remove Prompt
-                      </button>
+                    <div ref={provided.innerRef} {...provided.droppableProps} className="space-y-4">
+                      {prompts.map((p, i) => (
+                        <Draggable key={i} draggableId={`p-${i}`} index={i}>
+                          {(prov) => (
+                            <div
+                              ref={prov.innerRef}
+                              {...prov.draggableProps}
+                              {...prov.dragHandleProps}
+                              className="p-4 border border-green-100 rounded-lg bg-green-50/50"
+                            >
+                              <div className="flex justify-between items-center mb-2">
+                                <Badge variant="outline" className="border-green-200 text-green-700">
+                                  Prompt {i + 1}
+                                </Badge>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="text-red-600 hover:bg-red-50"
+                                  onClick={() => removePrompt(i)}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                              <div className="space-y-3">
+                                <div>
+                                  <Label className="text-sm">Label *</Label>
+                                  <Input
+                                    value={p.label}
+                                    placeholder="e.g., Draw a cat"
+                                    onChange={(e) => handleFieldChange(i, "label", e.target.value)}
+                                    className="border-green-200"
+                                  />
+                                </div>
+                                <div>
+                                  <Label className="text-sm">Description (optional)</Label>
+                                  <Textarea
+                                    rows={2}
+                                    className="border-green-200 resize-none"
+                                    value={p.description}
+                                    onChange={(e) =>
+                                      handleFieldChange(i, "description", e.target.value.slice(0, 200))
+                                    }
+                                  />
+                                  <p className="text-xs text-gray-500 mt-1">
+                                    {p.description.length}/200
+                                  </p>
+                                </div>
+                                <div className="flex gap-3">
+                                  <input
+                                    type="file"
+                                    accept="image/*"
+                                    id={`upload-${i}`}
+                                    hidden
+                                    onChange={(e) => {
+                                      const file = e.target.files?.[0];
+                                      if (!file) return;
+                                      const reader = new FileReader();
+                                      reader.onloadend = () =>
+                                        handleFieldChange(i, "exampleImage", reader.result as string);
+                                      reader.readAsDataURL(file);
+                                    }}
+                                  />
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="border-green-200"
+                                    onClick={() => document.getElementById(`upload-${i}`)?.click()}
+                                  >
+                                    <Upload className="h-4 w-4 mr-2" /> Upload Example
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="border-green-200"
+                                    onClick={() => {
+                                      setEditingPromptIndex(i);
+                                      setIsModalOpen(true);
+                                    }}
+                                  >
+                                    <Edit3 className="h-4 w-4 mr-2" /> Draw Example
+                                  </Button>
+                                </div>
+                                {p.exampleImage && (
+                                  <div className="mt-2">
+                                    <img
+                                      src={p.exampleImage}
+                                      alt="example"
+                                      className="max-w-[100px] border border-gray-300"
+                                    />
+                                    <div>
+                                      <Button
+                                        variant="link"
+                                        size="sm"
+                                        onClick={() => handleFieldChange(i, "exampleImage", null)}
+                                      >
+                                        Remove
+                                      </Button>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </Draggable>
+                      ))}
+                      {provided.placeholder}
                     </div>
                   )}
-                </Draggable>
-              ))}
-              {provided.placeholder}
-            </div>
-          )}
-        </Droppable>
-      </DragDropContext>
+                </Droppable>
+              </DragDropContext>
+              <Button
+                variant="outline"
+                className="w-full border-green-200 text-green-700 hover:bg-green-50"
+                onClick={addPrompt}
+              >
+                <Plus className="h-4 w-4 mr-2" /> Add Prompt
+              </Button>
+            </CardContent>
+          </Card>
 
-      <button onClick={addPrompt}>➕ Add Prompt</button>
-
-      <h2 style={{ marginTop: "2rem" }}>📏 Output Image Size</h2>
-      <select
-        value={outputSize}
-        onChange={(e) =>
-          handleOutputSizeChange({ target: { value: e.target.value } } as ChangeEvent<HTMLInputElement>)
-        }
-      >
-        {[28, 32, 64, 128, 256].map((size) => (
-          <option key={size} value={size}>
-            {size} x {size}
-          </option>
-        ))}
-      </select>
-
-      <h2 style={{ marginTop: "2rem" }}>🔗 Link Status</h2>
-      <label>
-        <input type="checkbox" checked={isOpen} onChange={handleIsOpenToggle} />
-        {isOpen ? "Open for Responses" : "Closed to Responses"}
-      </label>
-
-      <h2 style={{ marginTop: "2rem" }}>🎲 Shuffle Mode</h2>
-      <label>
-        <input
-          type="checkbox"
-          checked={shuffleMode}
-          onChange={() => {
-            const newVal = !shuffleMode;
-            setShuffleMode(newVal);
-            saveToFirestore({ shuffleMode: newVal }, true); // no validation needed
-          }}
-        />
-        Show prompts in random order for contributors
-      </label>
-
-      {isOpen && (
-        <>
-          <h2 style={{ marginTop: "2rem" }}>📤 Shareable Link</h2>
-          <p>
-            Send this to contributors:
-            <br />
-            <a href={shareUrl} target="_blank" rel="noreferrer">
-              {shareUrl}
-            </a>
-          </p>
-
-          <h3>📱 QR Code</h3>
-          <QRCode value={shareUrl} size={160} />
-        </>
-      )}
-
-      <h2 style={{ marginTop: "2rem" }}>📊 Dataset Stats</h2>
-      <p>
-        <strong>Total Submissions:</strong> {stats.total}
-      </p>
-      {stats.lastTime && (
-        <p>
-          <strong>Last Submission:</strong> {stats.lastTime.toLocaleString()}
-        </p>
-      )}
-
-      <h3>Submissions per Prompt</h3>
-      <ul>
-        {Object.entries(stats.perPrompt).map(([label, count]) => (
-          <li key={label}>
-            <strong>{label || "(No Label)"}:</strong> {count}
-          </li>
-        ))}
-      </ul>
-
-      <h2 style={{ marginTop: "3rem" }}>🧪 Dataset Preview</h2>
-      {drawings.length === 0 ? (
-        <p>No drawings submitted yet.</p>
-      ) : (
-        prompts.map((prompt, promptIndex) => {
-          const drawingsForPrompt = drawings.filter(
-            (d) => d.prompt === prompt.label
-          );
-          return (
-            <div key={promptIndex} style={{ marginBottom: "2rem" }}>
-              <h3>{prompt.label || `Prompt ${promptIndex + 1}`}</h3>
-              {drawingsForPrompt.length === 0 ? (
-                <p style={{ fontStyle: "italic" }}>
-                  No drawings for this prompt yet.
-                </p>
-              ) : (
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(auto-fit, minmax(80px, 1fr))",
-                    gap: "1rem",
-                    marginTop: "1rem",
-                  }}
-                >
-                  {drawingsForPrompt.map((drawing) => (
-                    <canvas
-                      key={drawing.id}
-                      width={Number(outputSize)}
-                      height={Number(outputSize)}
-                      title="Click to delete"
-                      onClick={async () => {
-                        if (
-                          confirm(
-                            "Are you sure you want to delete this drawing?"
-                          )
-                        ) {
-                          await deleteDoc(doc(db, "drawings", drawing.id));
-                          fetchDrawings(); // Refresh
-                        }
-                      }}
-                      ref={(canvas) => {
-                        if (canvas && drawing.imagePixels) {
-                          const flat = drawing.imagePixels.flat();
-                          const totalPixels = flat.length;
-                          const size = Math.sqrt(totalPixels); // Recover the original size
-                          const ctx = canvas.getContext("2d");
-                          if (ctx) {
-                            const imgData = ctx.createImageData(size, size);
-
-                            for (let i = 0; i < totalPixels; i++) {
-                              const grayscale = Math.floor(flat[i] * 255);
-                              imgData.data[i * 4 + 0] = grayscale;
-                              imgData.data[i * 4 + 1] = grayscale;
-                              imgData.data[i * 4 + 2] = grayscale;
-                              imgData.data[i * 4 + 3] = 255;
-                            }
-
-                            canvas.width = size;
-                            canvas.height = size;
-                            ctx.putImageData(imgData, 0, 0);
-                          }
-                        }
-                      }}
-                      style={{ border: "1px solid #ccc", cursor: "pointer" }}
-                    />
+          {/* Output Settings */}
+          <Card className="border-green-100">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <IconImage className="h-5 w-5 text-green-600" /> Output Settings
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Label>Image Resolution</Label>
+              <Select value={outputSize.toString()} onValueChange={handleOutputSizeChange}>
+                <SelectTrigger className="border-green-200 bg-white">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-white border-green-200">
+                  {[28, 32, 64, 128, 256].map((s) => (
+                    <SelectItem key={s} value={s.toString()}>
+                      {s} × {s} px
+                    </SelectItem>
                   ))}
+                </SelectContent>
+              </Select>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Sidebar */}
+        <div className="space-y-6">
+          {/* Share & QR */}
+          {isOpen && (
+            <Card className="border-green-100">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <IconQrCode className="h-5 w-5 text-green-600" /> Share Dataset
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <Label>Link</Label>
+                <div className="p-2 bg-gray-50 rounded border text-xs break-all">{shareUrl}</div>
+                <div className="text-center">
+                  <QRCode value={shareUrl} size={128} />
+                  <p className="text-xs text-gray-500 mt-2">QR Code</p>
                 </div>
-              )}
-            </div>
-          );
-        })
-      )}
+              </CardContent>
+            </Card>
+          )}
 
-      <h2 style={{ marginTop: "3rem" }}>⬇️ Export Dataset</h2>
-      <div style={{ display: "flex", gap: "1rem" }}>
-        <button onClick={() => handleExportCSV("pixels")}>
-          Download Pixel CSV
-        </button>
-        <button onClick={() => handleExportCSV("base64")}>
-          Download Base64 CSV
-        </button>
-        <button onClick={handleDownloadZip}>Download PNGs + Labels ZIP</button>
-        <button onClick={handleExportJSON}>Download Tensor JSON</button>
+          {/* Stats */}
+          <Card className="border-green-100">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <BarChart3 className="h-5 w-5 text-green-600" /> Dataset Stats
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="text-center">
+                <div className="text-3xl font-bold text-green-600">{stats.total}</div>
+                <p className="text-sm text-gray-600">Total Submissions</p>
+              </div>
+              <Separator />
+              <div>
+                <p className="text-sm font-medium text-gray-700 mb-2">Submissions / Prompt</p>
+                {Object.entries(stats.perPrompt).length > 0 ? (
+                  Object.entries(stats.perPrompt).map(([lab, cnt]) => (
+                    <div key={lab} className="flex justify-between text-sm">
+                      <span className="truncate">{lab}</span>
+                      <span className="font-medium">{cnt}</span>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-sm italic text-gray-500">No submissions yet</p>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Export */}
+          <Card className="border-green-100">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Download className="h-5 w-5 text-green-600" /> Export Data
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <Button
+                variant="outline"
+                className="w-full justify-start border-green-200"
+                onClick={() => handleExportCSV("pixels")}
+              >
+                <Download className="mr-2 h-4 w-4" /> CSV (pixels)
+              </Button>
+              <Button
+                variant="outline"
+                className="w-full justify-start border-green-200"
+                onClick={() => handleExportCSV("base64")}
+              >
+                <Download className="mr-2 h-4 w-4" /> CSV (base64)
+              </Button>
+              <Button
+                variant="outline"
+                className="w-full justify-start border-green-200"
+                onClick={handleDownloadZip}
+              >
+                <Download className="mr-2 h-4 w-4" /> ZIP (PNGs + labels)
+              </Button>
+              <Button
+                variant="outline"
+                className="w-full justify-start border-green-200"
+                onClick={handleExportJSON}
+              >
+                <Download className="mr-2 h-4 w-4" /> JSON
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* Danger Zone */}
+          <Card className="border-red-200">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-red-700">
+                <Trash2 className="h-5 w-5" /> Danger Zone
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Button variant="destructive" className="w-full" onClick={handleDeleteDataset}>
+                <Trash2 className="mr-2 h-4 w-4" /> Delete Dataset
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
       </div>
 
-      <div
-        style={{
-          marginTop: "4rem",
-          borderTop: "1px solid #ccc",
-          paddingTop: "1rem",
-        }}
-      >
-        <button
-          onClick={handleDeleteDataset}
-          style={{
-            backgroundColor: "#ff4d4f",
-            color: "white",
-            padding: "0.5rem 1rem",
-            border: "none",
-            borderRadius: "4px",
-            cursor: "pointer",
-          }}
-        >
-          🗑️ Delete This Dataset
-        </button>
-      </div>
-
+      {/* Draw Example Modal */}
       {isModalOpen && editingPromptIndex !== null && (
         <DrawExampleModal
-          onSave={(base64: string) => {
-            const updated = [...prompts];
-            updated[editingPromptIndex].exampleImage = base64;
-            setPrompts(updated);
-            saveToFirestore({ prompts: updated });
+          onSave={(base64) => {
+            handleFieldChange(editingPromptIndex, "exampleImage", base64);
           }}
           onClose={() => {
             setIsModalOpen(false);
@@ -776,4 +661,4 @@ export default function Dashboard(): React.ReactElement {
       )}
     </div>
   );
-} 
+}
