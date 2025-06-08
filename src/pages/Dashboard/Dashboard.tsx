@@ -59,6 +59,7 @@ import {
   Shuffle,
   Upload,
 } from "lucide-react";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 
 interface Prompt {
   label: string;
@@ -110,6 +111,7 @@ export default function Dashboard(): React.ReactElement {
   const [loading, setLoading] = useState<boolean>(true);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [editingPromptIndex, setEditingPromptIndex] = useState<number | null>(null);
+  const [isQrModalOpen, setIsQrModalOpen] = useState(false);
 
   // Fetch all datasets, pick default on mount
   useEffect(() => {
@@ -559,11 +561,30 @@ export default function Dashboard(): React.ReactElement {
               </CardHeader>
               <CardContent className="space-y-4">
                 <Label>Link</Label>
-                <div className="p-2 bg-gray-50 rounded border text-xs break-all">{shareUrl}</div>
-                <div className="text-center">
+                <div className="p-2 bg-gray-50 rounded border text-xs break-all mb-4">{shareUrl}</div>
+                <div className="flex flex-col items-center">
                   <QRCode value={shareUrl} size={128} />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-2 border-green-200"
+                    onClick={() => setIsQrModalOpen(true)}
+                  >
+                    Full Screen QR
+                  </Button>
                   <p className="text-xs text-gray-500 mt-2">QR Code</p>
                 </div>
+                <Dialog open={isQrModalOpen} onOpenChange={setIsQrModalOpen}>
+                  <DialogContent className="flex flex-col items-center justify-center bg-gradient-to-br from-green-50 via-white to-green-100 p-8 rounded-lg shadow-2xl border-green-200">
+                    <h2 className="text-lg font-semibold text-green-700 mb-4">Scan to Share Dataset</h2>
+                    <div className="bg-white p-6 rounded-lg border border-green-100 shadow mb-4 flex flex-col items-center">
+                      <QRCode value={shareUrl} size={300} />
+                    </div>
+                    <Button className="mt-2 w-full" onClick={() => setIsQrModalOpen(false)}>
+                      Close
+                    </Button>
+                  </DialogContent>
+                </Dialog>
               </CardContent>
             </Card>
           )}
