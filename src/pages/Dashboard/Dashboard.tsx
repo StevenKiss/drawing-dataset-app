@@ -382,6 +382,30 @@ export default function Dashboard(): React.ReactElement {
             </CardContent>
           </Card>
 
+          {/* Output Settings */}
+          <Card className="border-green-100">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <IconImage className="h-5 w-5 text-green-600" /> Output Settings
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Label>Image Resolution</Label>
+              <Select value={outputSize.toString()} onValueChange={handleOutputSizeChange}>
+                <SelectTrigger className="border-green-200 bg-white">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-white border-green-200">
+                  {[28, 32, 64, 128, 256].map((s) => (
+                    <SelectItem key={s} value={s.toString()}>
+                      {s} × {s} px
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </CardContent>
+          </Card>
+
           {/* Drawing Prompts */}
           <Card className="border-green-100">
             <CardHeader>
@@ -521,30 +545,6 @@ export default function Dashboard(): React.ReactElement {
               >
                 <Plus className="h-4 w-4 mr-2" /> Add Prompt
               </Button>
-            </CardContent>
-          </Card>
-
-          {/* Output Settings */}
-          <Card className="border-green-100">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <IconImage className="h-5 w-5 text-green-600" /> Output Settings
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Label>Image Resolution</Label>
-              <Select value={outputSize.toString()} onValueChange={handleOutputSizeChange}>
-                <SelectTrigger className="border-green-200 bg-white">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="bg-white border-green-200">
-                  {[28, 32, 64, 128, 256].map((s) => (
-                    <SelectItem key={s} value={s.toString()}>
-                      {s} × {s} px
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
             </CardContent>
           </Card>
         </div>
