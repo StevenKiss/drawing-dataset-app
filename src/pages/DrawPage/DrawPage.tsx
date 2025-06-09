@@ -1,3 +1,4 @@
+// src/pages/DrawPage.jsx
 import { useParams } from "react-router-dom";
 import { useEffect, useState, useRef } from "react";
 import {
@@ -8,27 +9,14 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 import { db } from "../../firebase";
-import Canvas, { CanvasRef } from "../../components/Canvas";
+import Canvas from "../../components/Canvas";
 
-interface Prompt {
-  label: string;
-  description?: string;
-  exampleImage?: string;
-}
-
-interface CreatorData {
-  prompts: (Prompt | string)[];
-  outputSize: number;
-  isOpen: boolean;
-  shuffleMode?: boolean;
-}
-
-export default function DrawPage(): JSX.Element {
-  const { creatorId, datasetId } = useParams<{ creatorId: string; datasetId: string }>();
-  const canvasRef = useRef<CanvasRef>(null);
-  const [creatorData, setCreatorData] = useState<CreatorData | null>(null);
-  const [currentPromptIndex, setCurrentPromptIndex] = useState<number>(0);
-  const [loading, setLoading] = useState<boolean>(true);
+export default function DrawPage() {
+  const { creatorId, datasetId } = useParams();
+  const canvasRef = useRef();
+  const [creatorData, setCreatorData] = useState(null);
+  const [currentPromptIndex, setCurrentPromptIndex] = useState(0);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchCreator = async () => {
@@ -38,7 +26,9 @@ export default function DrawPage(): JSX.Element {
         const docRef = doc(db, "creators", creatorId, "datasets", datasetId);
         const snap = await getDoc(docRef);
         if (snap.exists()) {
-          const data = snap.data() as CreatorData;
+          setCreatorData(snap.data());
+
+          const data = snap.data();
 
           // If shuffleMode is true, shuffle the prompts
           const prompts = data.prompts || [];
@@ -47,7 +37,7 @@ export default function DrawPage(): JSX.Element {
           }
 
           setCreatorData(data);
-          console.log("Fetched dataset:", data);
+          console.log("Fetched dataset:", snap.data());
         } else {
           setCreatorData(null);
         }
@@ -62,18 +52,35 @@ export default function DrawPage(): JSX.Element {
     fetchCreator();
   }, [creatorId, datasetId]);
 
-  const handleSubmitDrawing = async (): Promise<void> => {
+  const handleSubmitDrawing = async () => {
     if (!canvasRef.current || !creatorData) return;
 
-    try {
-      const pixels = await canvasRef.current.exportPaths();
-      if (!pixels || pixels.length === 0) {
-        alert("Please draw something before submitting.");
-        return;
-      }
+    const exportData = await canvasRef.current.exportPaths();
+    if (!exportData || exportData.length === 0) {
+      alert("Please draw something before submitting.");
+      return;
+    }
 
-      const base64 = await canvasRef.current.exportImage("png");
-      if (!base64) return;
+    const base64 = await canvasRef.current.exportImage("png");
+
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+    const img = new Image();
+    img.src = base64;
+
+    img.onload = async () => {
+      const size = creatorData.outputSize;
+      canvas.width = size;
+      canvas.height = size;
+      ctx.drawImage(img, 0, 0, size, size);
+
+      const imageData = ctx.getImageData(0, 0, size, size);
+      const pixels = [];
+
+      for (let i = 0; i < imageData.data.length; i += 4) {
+        const grayscale = imageData.data[i]; // red channel as grayscale
+        pixels.push(grayscale / 255);
+      }
 
       const promptObj = creatorData.prompts[currentPromptIndex];
       const label =
@@ -92,10 +99,7 @@ export default function DrawPage(): JSX.Element {
 
       await canvasRef.current.clearCanvas();
       setCurrentPromptIndex((prev) => prev + 1);
-    } catch (err) {
-      console.error("Error submitting drawing:", err);
-      alert("Something went wrong while submitting your drawing.");
-    }
+    };
   };
 
   if (loading)
@@ -165,4 +169,4 @@ export default function DrawPage(): JSX.Element {
       </div>
     </div>
   );
-} 
+}

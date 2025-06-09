@@ -108,25 +108,44 @@ const Canvas = forwardRef<CanvasRef, CanvasProps>(({ width = 400, height = 400 }
     },
     exportImage: async (format: string) => {
       const canvas = canvasRef.current;
-      if (!canvas) return '';
-      return canvas.toDataURL(`image/${format}`);
+      if (!canvas) {
+        console.error("Canvas element not found");
+        return '';
+      }
+      try {
+        return canvas.toDataURL(`image/${format}`);
+      } catch (err) {
+        console.error("Error exporting image:", err);
+        return '';
+      }
     },
     exportPaths: async () => {
       const canvas = canvasRef.current;
-      if (!canvas) return [];
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return [];
-      
-      const imageData = ctx.getImageData(0, 0, width, height);
-      const pixels = [];
-      for (let i = 0; i < imageData.data.length; i += 4) {
-        const r = imageData.data[i];
-        const g = imageData.data[i + 1];
-        const b = imageData.data[i + 2];
-        const grayscale = (r + g + b) / 3 / 255;
-        pixels.push(grayscale);
+      if (!canvas) {
+        console.error("Canvas element not found");
+        return [];
       }
-      return pixels;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        console.error("Could not get canvas context");
+        return [];
+      }
+      
+      try {
+        const imageData = ctx.getImageData(0, 0, width, height);
+        const pixels = [];
+        for (let i = 0; i < imageData.data.length; i += 4) {
+          const r = imageData.data[i];
+          const g = imageData.data[i + 1];
+          const b = imageData.data[i + 2];
+          const grayscale = (r + g + b) / 3 / 255;
+          pixels.push(grayscale);
+        }
+        return pixels;
+      } catch (err) {
+        console.error("Error exporting paths:", err);
+        return [];
+      }
     }
   }));
 
