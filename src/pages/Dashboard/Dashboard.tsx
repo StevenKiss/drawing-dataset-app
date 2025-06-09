@@ -19,6 +19,7 @@ import JSZip from "jszip";
 import { saveAs } from "file-saver";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import DrawExampleModal from "../../components/DrawExampleModal";
+import PromptSubmissionsModal from "../../components/PromptSubmissionsModal";
 import { db } from "../../firebase";
 import logo from "../../assets/logo.png";
 
@@ -112,6 +113,8 @@ export default function Dashboard(): React.ReactElement {
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [editingPromptIndex, setEditingPromptIndex] = useState<number | null>(null);
   const [isQrModalOpen, setIsQrModalOpen] = useState(false);
+  const [isSubmissionsModalOpen, setIsSubmissionsModalOpen] = useState<boolean>(false);
+  const [selectedPromptForSubmissions, setSelectedPromptForSubmissions] = useState<string>("");
 
   // Fetch all datasets, pick default on mount
   useEffect(() => {
@@ -292,6 +295,21 @@ export default function Dashboard(): React.ReactElement {
     saveAs(blob, "dataset.json");
   };
 
+  const handleDeleteSubmission = (id: string) => {
+    setDrawings((prev) => prev.filter((d) => d.id !== id));
+    setStats((prev) => {
+      const prompt = drawings.find((d) => d.id === id)?.prompt;
+      if (!prompt) return prev;
+      const newPerPrompt = { ...prev.perPrompt };
+      newPerPrompt[prompt] = (newPerPrompt[prompt] || 1) - 1;
+      return {
+        total: prev.total - 1,
+        perPrompt: newPerPrompt,
+        lastTime: prev.lastTime,
+      };
+    });
+  };
+
   if (loading) return <div style={{ padding: "2rem" }}>Loading dashboard...</div>;
 
   const selected = datasets.find((d) => d.id === selectedDatasetId);
@@ -441,14 +459,27 @@ export default function Dashboard(): React.ReactElement {
                                 <Badge variant="outline" className="border-green-200 text-green-700">
                                   Prompt {i + 1}
                                 </Badge>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="text-red-600 hover:bg-red-50"
-                                  onClick={() => removePrompt(i)}
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
+                                <div className="flex items-center gap-2">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="border-green-200 text-green-700 hover:bg-green-50"
+                                    onClick={() => {
+                                      setSelectedPromptForSubmissions(p.label);
+                                      setIsSubmissionsModalOpen(true);
+                                    }}
+                                  >
+                                    <BarChart3 className="h-4 w-4 mr-2" /> View Submissions ({stats.perPrompt[p.label] || 0})
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="text-red-600 hover:bg-red-50"
+                                    onClick={() => removePrompt(i)}
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </div>
                               </div>
                               <div className="space-y-3">
                                 <div>
@@ -705,6 +736,17 @@ export default function Dashboard(): React.ReactElement {
           }}
         />
       )}
+
+      <PromptSubmissionsModal
+        isOpen={isSubmissionsModalOpen}
+        onClose={() => {
+          setIsSubmissionsModalOpen(false);
+          setSelectedPromptForSubmissions("");
+        }}
+        prompt={selectedPromptForSubmissions}
+        submissions={drawings.filter((d) => d.prompt === selectedPromptForSubmissions)}
+        onDelete={handleDeleteSubmission}
+      />
     </div>
   );
 }
