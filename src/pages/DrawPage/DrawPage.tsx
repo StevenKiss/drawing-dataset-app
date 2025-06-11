@@ -296,7 +296,7 @@ export default function DrawPage() {
               </CardHeader>
               <CardContent>
                 <div className="flex justify-center">
-                  <div className="bg-white rounded-xl p-6 shadow-inner border-2 border-slate-200">
+                  <div className="bg-white rounded-xl p-4 sm:p-6 shadow-inner border-2 border-slate-200 w-full max-w-[400px]">
                     <Canvas ref={canvasRef} width={400} height={400} />
                   </div>
                 </div>

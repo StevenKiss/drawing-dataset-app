@@ -22,7 +22,6 @@ import DrawExampleModal from "../../components/DrawExampleModal";
 import PromptSubmissionsModal from "../../components/PromptSubmissionsModal";
 import FeedbackModal from "../../components/FeedbackModal";
 import { db } from "../../firebase";
-import logo from "../../assets/logo.png";
 
 // ShadCN UI components & icons
 import { Button } from "@/components/ui/button";
@@ -338,7 +337,7 @@ export default function Dashboard(): React.ReactElement {
       <header className="bg-white/80 backdrop-blur-sm border-b border-green-100 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <img src={logo} alt="DoodleVault Logo" className="h-8 w-auto" />
+            <img src="/logo.png" alt="DoodleVault Logo" className="h-8 w-auto" />
             <h1 className="text-2xl font-bold text-green-800">DoodleVault</h1>
           </div>
           <div className="flex gap-2">

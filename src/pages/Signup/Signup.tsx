@@ -82,7 +82,7 @@ const Signup: React.FC = () => {
           </Link>
           <div className="flex items-center justify-center space-x-3 mb-4">
             <img
-              src="/src/assets/logo.png"
+              src="/logo.png"
               alt="DoodleVault Logo"
               className="w-12 h-12"
             />

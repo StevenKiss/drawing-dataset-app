@@ -1,4 +1,5 @@
 import React, { forwardRef, useRef, useEffect } from "react";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 interface CanvasProps {
   width?: number;
@@ -16,6 +17,11 @@ const Canvas = forwardRef<CanvasRef, CanvasProps>(({ width = 400, height = 400 }
   const isDrawing = useRef(false);
   const lastX = useRef(0);
   const lastY = useRef(0);
+  const isMobile = useIsMobile();
+
+  // Calculate responsive dimensions
+  const canvasWidth = isMobile ? Math.min(width, window.innerWidth - 32) : width;
+  const canvasHeight = isMobile ? Math.min(height, window.innerWidth - 32) : height;
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -25,16 +31,16 @@ const Canvas = forwardRef<CanvasRef, CanvasProps>(({ width = 400, height = 400 }
     if (!ctx) return;
 
     // Set canvas size
-    canvas.width = width;
-    canvas.height = height;
+    canvas.width = canvasWidth;
+    canvas.height = canvasHeight;
 
     // Set initial styles
     ctx.strokeStyle = 'black';
-    ctx.lineWidth = 25;
+    ctx.lineWidth = isMobile ? 15 : 25; // Thinner lines on mobile
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     ctx.fillStyle = 'white';
-    ctx.fillRect(0, 0, width, height);
+    ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 
     const startDrawing = (e: MouseEvent | TouchEvent) => {
       isDrawing.current = true;
@@ -94,7 +100,7 @@ const Canvas = forwardRef<CanvasRef, CanvasProps>(({ width = 400, height = 400 }
       canvas.removeEventListener('touchmove', draw);
       canvas.removeEventListener('touchend', stopDrawing);
     };
-  }, [width, height]);
+  }, [canvasWidth, canvasHeight, isMobile]);
 
   // Expose methods via ref
   React.useImperativeHandle(ref, () => ({
@@ -104,7 +110,7 @@ const Canvas = forwardRef<CanvasRef, CanvasProps>(({ width = 400, height = 400 }
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
       ctx.fillStyle = 'white';
-      ctx.fillRect(0, 0, width, height);
+      ctx.fillRect(0, 0, canvasWidth, canvasHeight);
     },
     exportImage: async (format: string) => {
       const canvas = canvasRef.current;
@@ -132,7 +138,7 @@ const Canvas = forwardRef<CanvasRef, CanvasProps>(({ width = 400, height = 400 }
       }
       
       try {
-        const imageData = ctx.getImageData(0, 0, width, height);
+        const imageData = ctx.getImageData(0, 0, canvasWidth, canvasHeight);
         const pixels = [];
         for (let i = 0; i < imageData.data.length; i += 4) {
           const r = imageData.data[i];
@@ -155,9 +161,11 @@ const Canvas = forwardRef<CanvasRef, CanvasProps>(({ width = 400, height = 400 }
       style={{
         border: "2px solid #000",
         borderRadius: "8px",
-        width: `${width}px`,
-        height: `${height}px`,
-        touchAction: 'none'
+        width: `${canvasWidth}px`,
+        height: `${canvasHeight}px`,
+        touchAction: 'none',
+        maxWidth: '100%',
+        maxHeight: '100%'
       }}
     />
   );

@@ -55,7 +55,7 @@ const Login: React.FC = () => {
 
           <div className="flex items-center justify-center space-x-3 mb-4">
             <img
-              src="/src/assets/logo.png"
+              src="/logo.png"
               alt="DoodleVault Logo"
               className="w-12 h-12"
             />
@@ -124,7 +124,7 @@ const Login: React.FC = () => {
 
             <div className="mt-6 text-center">
               <p className="text-gray-600">
-                Don’t have an account?{' '}
+                Don't have an account?{' '}
                 <Link
                   to="/signup"
                   className="text-green-600 hover:text-green-700 font-medium hover:underline"
