@@ -10,8 +10,8 @@ import {
   getDocs,
   deleteDoc,
 } from "firebase/firestore";
-import { getAuth, signOut, User } from "firebase/auth";
-import { useLocation } from "react-router-dom";
+import { getAuth, signOut, User, onAuthStateChanged } from "firebase/auth";
+import { useLocation, useNavigate } from "react-router-dom";
 import QRCode from "react-qr-code";
 import Papa from "papaparse";
 import { v4 as uuidv4 } from "uuid";
@@ -20,6 +20,7 @@ import { saveAs } from "file-saver";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import DrawExampleModal from "../../components/DrawExampleModal";
 import PromptSubmissionsModal from "../../components/PromptSubmissionsModal";
+import FeedbackModal from "../../components/FeedbackModal";
 import { db } from "../../firebase";
 import logo from "../../assets/logo.png";
 
@@ -59,6 +60,7 @@ import {
   Unlock,
   Shuffle,
   Upload,
+  MessageSquareText,
 } from "lucide-react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 
@@ -93,7 +95,8 @@ interface Drawing {
 
 export default function Dashboard(): React.ReactElement {
   const auth = getAuth();
-  const user: User | null = auth.currentUser;
+  const navigate = useNavigate();
+  const [user, setUser] = useState<User | null>(null);
   const location = useLocation();
 
   const [datasets, setDatasets] = useState<Dataset[]>([]);
@@ -115,6 +118,21 @@ export default function Dashboard(): React.ReactElement {
   const [isQrModalOpen, setIsQrModalOpen] = useState(false);
   const [isSubmissionsModalOpen, setIsSubmissionsModalOpen] = useState<boolean>(false);
   const [selectedPromptForSubmissions, setSelectedPromptForSubmissions] = useState<string>("");
+  const [isFeedbackModalOpen, setIsFeedbackModalOpen] = useState<boolean>(false);
+
+  // Add auth state listener
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        setUser(user);
+      } else {
+        navigate('/login');
+      }
+    });
+
+    // Cleanup subscription
+    return () => unsubscribe();
+  }, [auth, navigate]);
 
   // Fetch all datasets, pick default on mount
   useEffect(() => {
@@ -326,6 +344,9 @@ export default function Dashboard(): React.ReactElement {
           <div className="flex gap-2">
             <Button variant="outline" onClick={handleCreateDataset}>
               <Plus className="mr-2 h-4 w-4" /> New Dataset
+            </Button>
+            <Button variant="outline" onClick={() => setIsFeedbackModalOpen(true)}>
+              <MessageSquareText className="mr-2 h-4 w-4" /> Feedback
             </Button>
             <Button variant="outline" onClick={handleLogout}>
               <LogOut className="mr-2 h-4 w-4" /> Sign Out
@@ -736,6 +757,12 @@ export default function Dashboard(): React.ReactElement {
           }}
         />
       )}
+
+      {/* Feedback Modal */}
+      <FeedbackModal
+        isOpen={isFeedbackModalOpen}
+        onClose={() => setIsFeedbackModalOpen(false)}
+      />
 
       <PromptSubmissionsModal
         isOpen={isSubmissionsModalOpen}
