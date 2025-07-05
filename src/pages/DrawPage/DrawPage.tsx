@@ -14,8 +14,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Loader2, Palette, Send, RotateCcw, Lock, CheckCircle, XCircle } from "lucide-react";
+import { Slider } from "@/components/ui/slider";
+import { Label } from "@/components/ui/label";
+import { Loader2, Palette, Send, RotateCcw, Lock, CheckCircle, XCircle, Minus, Plus, Brush, Eraser, Settings } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 
 export default function DrawPage() {
   const { creatorId, datasetId } = useParams();
@@ -24,6 +27,8 @@ export default function DrawPage() {
   const [currentPromptIndex, setCurrentPromptIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [brushSize, setBrushSize] = useState(25);
+  const [tool, setTool] = useState<'brush' | 'eraser'>('brush');
 
   useEffect(() => {
     const fetchCreator = async () => {
@@ -221,8 +226,8 @@ export default function DrawPage() {
         </div>
       </div>
 
-      <div className="container mx-auto px-4 py-6 max-w-7xl">
-        {/* Progress Section */}
+      {/* Progress Bar */}
+      <div className="container mx-auto px-4 pt-6">
         <Card className="mb-6">
           <CardContent className="p-6">
             <div className="flex items-center justify-between mb-3">
@@ -242,11 +247,14 @@ export default function DrawPage() {
             </div>
           </CardContent>
         </Card>
+      </div>
 
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-          {/* Left Column - Prompt Info */}
-          <div className="space-y-6">
-            {/* Current Prompt */}
+      {/* Main Content Grid */}
+      <div className="container mx-auto px-4 pb-8">
+        <div className="grid grid-cols-1 lg:grid-cols-10 gap-8">
+          {/* Left Column: Prompt + Example */}
+          <div className="lg:col-span-3 flex flex-col gap-6">
+            {/* Drawing Prompt */}
             <Card className="h-fit">
               <CardHeader>
                 <CardTitle className="flex items-center space-x-2">
@@ -262,7 +270,7 @@ export default function DrawPage() {
               </CardContent>
             </Card>
 
-            {/* Example Image */}
+            {/* Example Drawing */}
             {typeof currentPrompt === "object" && currentPrompt.exampleImage && (
               <Card className="h-fit">
                 <CardHeader>
@@ -287,60 +295,187 @@ export default function DrawPage() {
             )}
           </div>
 
-          {/* Right Column - Drawing Canvas */}
-          <div className="space-y-6 flex flex-col h-full">
-            {/* Canvas */}
+          {/* Right Column: Canvas + Controls */}
+          <div className="lg:col-span-7 flex flex-col gap-6">
+            {/* Drawing Canvas Card */}
             <Card className="h-fit">
               <CardHeader>
-                <CardTitle>Drawing Canvas</CardTitle>
+                <div className="flex items-center justify-between">
+                  <CardTitle>Drawing Canvas</CardTitle>
+                  <div className="flex items-center gap-3">
+                    <Button
+                      variant={tool === 'brush' ? 'default' : 'ghost'}
+                      size="icon"
+                      style={{
+                        borderRadius: '50%',
+                        width: 36,
+                        height: 36,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        background: tool === 'brush' ? '#22c55e' : '#f3f4f6',
+                        color: '#fff',
+                        border: tool === 'brush' ? '2px solid #22c55e' : 'none',
+                        boxShadow: 'none',
+                        transition: 'background 0.2s',
+                        padding: 0,
+                        position: 'relative',
+                        cursor: 'pointer',
+                      }}
+                      aria-label={tool === 'brush' ? 'Brush (active)' : 'Brush'}
+                      onClick={() => setTool('brush')}
+                    >
+                      <Brush size={18} color={tool === 'brush' ? '#fff' : '#22c55e'} />
+                    </Button>
+                    <Button
+                      variant={tool === 'eraser' ? 'default' : 'ghost'}
+                      size="icon"
+                      style={{
+                        borderRadius: '50%',
+                        width: 36,
+                        height: 36,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        background: tool === 'eraser' ? '#f87171' : '#f3f4f6',
+                        color: tool === 'eraser' ? '#fff' : '#222',
+                        border: tool === 'eraser' ? '2px solid #f87171' : 'none',
+                        boxShadow: 'none',
+                        transition: 'background 0.2s',
+                        padding: 0,
+                        position: 'relative',
+                        cursor: 'pointer',
+                      }}
+                      aria-label={tool === 'eraser' ? 'Eraser (active)' : 'Eraser'}
+                      onClick={() => setTool('eraser')}
+                    >
+                      <Eraser size={18} color={tool === 'eraser' ? '#fff' : '#f87171'} />
+                    </Button>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          style={{
+                            borderRadius: '50%',
+                            width: 36,
+                            height: 36,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            background: '#f3f4f6',
+                            color: '#222',
+                            border: 'none',
+                            boxShadow: 'none',
+                            transition: 'background 0.2s',
+                            padding: 0,
+                            position: 'relative',
+                            cursor: 'pointer',
+                          }}
+                          aria-label="Adjust tool size"
+                        >
+                          <Settings size={18} />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent align="end" sideOffset={8} style={{
+                        width: 220,
+                        padding: 20,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        zIndex: 9999,
+                        background: '#fff',
+                        border: '1.5px solid #e5e7eb',
+                        borderRadius: 12,
+                        boxShadow: '0 4px 24px #0002',
+                      }}>
+                        <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 10 }}>Tool Size</div>
+                        {/* Live preview of stroke */}
+                        <div style={{ width: '100%', display: 'flex', alignItems: 'center', marginBottom: 16 }}>
+                          <span style={{ fontSize: 13, color: '#888', minWidth: 40 }}>{brushSize}px</span>
+                          <svg width="100" height="24" style={{ margin: '0 8px' }}>
+                            <line x1="0" y1="12" x2="100" y2="12" stroke={tool === 'brush' ? '#22c55e' : '#f87171'} strokeWidth={brushSize} strokeLinecap="round" />
+                          </svg>
+                        </div>
+                        {/* Slider */}
+                        <div style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12 }}>
+                          <span style={{ fontSize: 12, color: '#888' }}>Thin</span>
+                          <Slider
+                            value={[brushSize]}
+                            onValueChange={(value) => {
+                              const newSize = value[0];
+                              setBrushSize(newSize);
+                              canvasRef.current?.setBrushSize(newSize);
+                            }}
+                            min={5}
+                            max={25}
+                            step={1}
+                            style={{ flex: 1 }}
+                            aria-label="Tool size slider"
+                            brushSize={brushSize}
+                          />
+                          <span style={{ fontSize: 12, color: '#888' }}>Thick</span>
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                </div>
               </CardHeader>
               <CardContent>
                 <div className="flex justify-center">
-                  <div className="bg-white rounded-xl p-4 sm:p-6 shadow-inner border-2 border-slate-200 w-full max-w-[400px]">
-                    <Canvas ref={canvasRef} width={400} height={400} />
+                  <div
+                    style={{
+                      background: "#fff",
+                      borderRadius: 14,
+                      boxShadow: "0 2px 8px #0001",
+                      border: "2px solid #e5e7eb",
+                      padding: 8,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      width: 320,
+                      aspectRatio: '1/1',
+                      maxWidth: '90vw',
+                      maxHeight: '60vw',
+                    }}
+                  >
+                    <div style={{ width: '100%', height: '100%', aspectRatio: '1/1', position: 'relative' }}>
+                      <Canvas ref={canvasRef} brushSize={brushSize} width={300} height={300} isEraser={tool === 'eraser'} />
+                    </div>
                   </div>
                 </div>
               </CardContent>
-            </Card>
-
-            {/* Action Buttons */}
-            <Card className="flex-1 flex flex-col">
-              <CardContent className="p-6 flex flex-col flex-1">
-                <div className="flex flex-col sm:flex-row gap-4">
-                  <Button
-                    onClick={handleSubmitDrawing}
-                    disabled={submitting}
-                    className="flex-1 bg-green-600 hover:bg-green-700 text-white h-12 text-lg"
-                    size="lg"
-                  >
-                    {submitting ? (
-                      <>
-                        <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                        Submitting...
-                      </>
-                    ) : (
-                      <>
-                        <Send className="mr-2 h-5 w-5" />
-                        Submit Drawing
-                      </>
-                    )}
-                  </Button>
-                  <Button
-                    onClick={() => canvasRef.current?.clearCanvas()}
-                    variant="outline"
-                    size="lg"
-                    disabled={submitting}
-                    className="h-12 text-lg"
-                  >
-                    <RotateCcw className="mr-2 h-5 w-5" />
-                    Clear Canvas
-                  </Button>
-                </div>
-                <Separator className="my-4" />
-                <p className="text-sm text-muted-foreground text-center leading-relaxed mt-auto">
-                  Draw your interpretation of the prompt above, then submit to continue to the next one.
-                </p>
-              </CardContent>
+              {/* Footer Bar: Submit and Clear */}
+              <div className="flex flex-row gap-4 w-full px-6 pb-6">
+                <Button
+                  onClick={handleSubmitDrawing}
+                  disabled={submitting}
+                  className="flex-1 bg-green-600 hover:bg-green-700 text-white h-12 text-lg"
+                  size="lg"
+                >
+                  {submitting ? (
+                    <>
+                      <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                      Submitting...
+                    </>
+                  ) : (
+                    <>
+                      <Send className="mr-2 h-5 w-5" />
+                      Submit Drawing
+                    </>
+                  )}
+                </Button>
+                <Button
+                  onClick={() => canvasRef.current?.clearCanvas()}
+                  variant="outline"
+                  size="lg"
+                  disabled={submitting}
+                  className="h-12 text-lg"
+                >
+                  <RotateCcw className="mr-2 h-5 w-5" />
+                  Clear Canvas
+                </Button>
+              </div>
             </Card>
           </div>
         </div>

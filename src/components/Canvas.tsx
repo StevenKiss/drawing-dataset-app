@@ -4,20 +4,26 @@ import { useIsMobile } from "@/hooks/use-mobile";
 interface CanvasProps {
   width?: number;
   height?: number;
+  brushSize?: number;
+  isEraser?: boolean;
 }
 
 export interface CanvasRef {
   clearCanvas: () => void;
   exportImage: (format: string) => Promise<string>;
   exportPaths: () => Promise<any>;
+  setBrushSize: (size: number) => void;
 }
 
-const Canvas = forwardRef<CanvasRef, CanvasProps>(({ width = 400, height = 400 }, ref) => {
+const Canvas = forwardRef<CanvasRef, CanvasProps>(({ width = 400, height = 400, brushSize: initialBrushSize, isEraser = false }, ref) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const isDrawing = useRef(false);
   const lastX = useRef(0);
   const lastY = useRef(0);
   const isMobile = useIsMobile();
+  const brushSizeRef = useRef(initialBrushSize || (isMobile ? 15 : 25));
+  const isEraserRef = useRef(isEraser);
+  isEraserRef.current = isEraser;
 
   // Calculate responsive dimensions
   const canvasWidth = isMobile ? Math.min(width, window.innerWidth - 32) : width;
@@ -34,15 +40,15 @@ const Canvas = forwardRef<CanvasRef, CanvasProps>(({ width = 400, height = 400 }
     canvas.width = canvasWidth;
     canvas.height = canvasHeight;
 
-    // Set initial styles
-    ctx.strokeStyle = 'black';
-    ctx.lineWidth = isMobile ? 15 : 25; // Thinner lines on mobile
+    // Set initial styles (do not set strokeStyle here)
+    ctx.lineWidth = brushSizeRef.current;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     ctx.fillStyle = 'white';
     ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 
     const startDrawing = (e: MouseEvent | TouchEvent) => {
+      e.preventDefault(); // Prevent default to avoid scrolling on mobile
       isDrawing.current = true;
       const point = getPoint(e);
       lastX.current = point.x;
@@ -50,10 +56,12 @@ const Canvas = forwardRef<CanvasRef, CanvasProps>(({ width = 400, height = 400 }
     };
 
     const draw = (e: MouseEvent | TouchEvent) => {
+      e.preventDefault(); // Prevent default to avoid scrolling on mobile
       if (!isDrawing.current) return;
       const point = getPoint(e);
       
       ctx.beginPath();
+      ctx.strokeStyle = isEraserRef.current ? 'white' : 'black';
       ctx.moveTo(lastX.current, lastY.current);
       ctx.lineTo(point.x, point.y);
       ctx.stroke();
@@ -62,33 +70,51 @@ const Canvas = forwardRef<CanvasRef, CanvasProps>(({ width = 400, height = 400 }
       lastY.current = point.y;
     };
 
-    const stopDrawing = () => {
+    const stopDrawing = (e: MouseEvent | TouchEvent) => {
+      e.preventDefault(); // Prevent default to avoid scrolling on mobile
       isDrawing.current = false;
     };
 
     const getPoint = (e: MouseEvent | TouchEvent) => {
       const rect = canvas.getBoundingClientRect();
+      
+      // Get the actual display size of the canvas
+      const displayWidth = rect.width;
+      const displayHeight = rect.height;
+      
+      // Calculate scale factors
+      const scaleX = canvas.width / displayWidth;
+      const scaleY = canvas.height / displayHeight;
+      
+      let x: number, y: number;
+      
       if (e instanceof MouseEvent) {
-        return {
-          x: e.clientX - rect.left,
-          y: e.clientY - rect.top
-        };
+        // Use offsetX/offsetY for more accurate mouse positioning
+        x = e.offsetX * scaleX;
+        y = e.offsetY * scaleY;
       } else {
-        return {
-          x: e.touches[0].clientX - rect.left,
-          y: e.touches[0].clientY - rect.top
-        };
+        // For touch events, calculate relative to canvas bounds
+        const clientX = e.touches[0].clientX;
+        const clientY = e.touches[0].clientY;
+        x = (clientX - rect.left) * scaleX;
+        y = (clientY - rect.top) * scaleY;
       }
+      
+      // Clamp values to canvas bounds
+      return {
+        x: Math.max(0, Math.min(canvas.width, x)),
+        y: Math.max(0, Math.min(canvas.height, y))
+      };
     };
 
     // Add event listeners
-    canvas.addEventListener('mousedown', startDrawing);
-    canvas.addEventListener('mousemove', draw);
-    canvas.addEventListener('mouseup', stopDrawing);
-    canvas.addEventListener('mouseout', stopDrawing);
-    canvas.addEventListener('touchstart', startDrawing);
-    canvas.addEventListener('touchmove', draw);
-    canvas.addEventListener('touchend', stopDrawing);
+    canvas.addEventListener('mousedown', startDrawing, { passive: false });
+    canvas.addEventListener('mousemove', draw, { passive: false });
+    canvas.addEventListener('mouseup', stopDrawing, { passive: false });
+    canvas.addEventListener('mouseout', stopDrawing, { passive: false });
+    canvas.addEventListener('touchstart', startDrawing, { passive: false });
+    canvas.addEventListener('touchmove', draw, { passive: false });
+    canvas.addEventListener('touchend', stopDrawing, { passive: false });
 
     // Cleanup
     return () => {
@@ -111,6 +137,14 @@ const Canvas = forwardRef<CanvasRef, CanvasProps>(({ width = 400, height = 400 }
       if (!ctx) return;
       ctx.fillStyle = 'white';
       ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+    },
+    setBrushSize: (size: number) => {
+      brushSizeRef.current = size;
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      ctx.lineWidth = size;
     },
     exportImage: async (format: string) => {
       const canvas = canvasRef.current;
@@ -165,7 +199,9 @@ const Canvas = forwardRef<CanvasRef, CanvasProps>(({ width = 400, height = 400 }
         height: `${canvasHeight}px`,
         touchAction: 'none',
         maxWidth: '100%',
-        maxHeight: '100%'
+        maxHeight: '100%',
+        display: 'block', // Ensure no extra spacing
+        boxSizing: 'border-box' // Include border in size calculation
       }}
     />
   );
